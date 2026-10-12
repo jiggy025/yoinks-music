@@ -26,9 +26,21 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
     artist.pictureSmall;
 
   return (
-    <article className="bg-white rounded-2xl border border-zinc-200/80 p-4 shadow-xs flex flex-col gap-3.5 select-none">
-      {/* Row 1: Portrait & Info */}
-      <div className="flex items-center gap-3.5">
+    <article className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-col gap-3.5 select-none">
+      {/* Row 1: Portrait & Info (clickable for quick discography access) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onViewArtist(artist)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onViewArtist(artist);
+          }
+        }}
+        aria-label={`View discography for ${artist.name}`}
+        className="flex items-center gap-3.5 cursor-pointer rounded-xl p-1 -m-1 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+      >
         {/* 60x60px circular artist portrait with fallback */}
         <div className="w-[60px] h-[60px] rounded-full overflow-hidden flex-shrink-0 border border-slate-200/80 bg-slate-100 flex items-center justify-center shadow-xs">
           {imageUrl && !imageError ? (
@@ -61,9 +73,9 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
           </h3>
 
           {/* Stats: Albums count with Disc3 icon, fan count if > 0 */}
-          <div className="flex items-center gap-2.5 text-xs text-slate-500 font-medium">
+          <div className="flex items-center gap-2.5 text-sm text-slate-600 font-medium">
             <span className="flex items-center gap-1">
-              <Disc3 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
+              <Disc3 className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" aria-hidden="true" />
               <span>
                 {artist.nbAlbum} {artist.nbAlbum === 1 ? 'Album' : 'Albums'}
               </span>
@@ -73,7 +85,7 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
               <>
                 <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" aria-hidden="true" />
                 <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                  <Users className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" aria-hidden="true" />
                   <span>
                     {artist.nbFan.toLocaleString()} {artist.nbFan === 1 ? 'Fan' : 'Fans'}
                   </span>
@@ -88,7 +100,8 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
       <button
         type="button"
         onClick={() => onViewArtist(artist)}
-        className="min-h-[48px] w-full px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        aria-label={`View discography and albums for ${artist.name}`}
+        className="min-h-[48px] w-full px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
       >
         <span>View Discography & Albums</span>
         <ArrowRight className="w-4 h-4 flex-shrink-0" aria-hidden="true" />

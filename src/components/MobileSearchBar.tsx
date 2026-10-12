@@ -24,6 +24,8 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
   onSearch,
   isSearching = false,
 }) => {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = query.trim();
@@ -44,6 +46,7 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
 
   const handleClear = () => {
     setQuery('');
+    inputRef.current?.focus();
   };
 
   const handleChipClick = (chip: string) => {
@@ -68,13 +71,14 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
         </div>
 
         <input
+          ref={inputRef}
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search artists, songs, or albums..."
           aria-label="Search music"
-          className="w-full min-h-[48px] pl-10 pr-12 rounded-xl bg-white border border-slate-200/80 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-xs transition-all"
+          className="w-full min-h-[48px] pl-10 pr-12 rounded-xl bg-white border border-slate-200/80 text-slate-900 placeholder:text-slate-400 text-base font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 focus:border-blue-500 shadow-xs transition-all [&::-webkit-search-cancel-button]:hidden"
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
@@ -85,7 +89,7 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
             type="button"
             onClick={handleClear}
             aria-label="Clear search query"
-            className="absolute right-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 active:scale-95 transition-all cursor-pointer"
+            className="absolute right-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -100,7 +104,7 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
               key={chip}
               type="button"
               onClick={() => handleChipClick(chip)}
-              className="min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 hover:border-blue-500 hover:text-blue-600 active:scale-[0.98] transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap"
+              className="min-h-[44px] px-4 py-2 rounded-full text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 hover:border-blue-500 hover:text-blue-600 active:scale-[0.98] transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
             >
               {chip}
             </button>

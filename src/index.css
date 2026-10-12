@@ -12,3 +12,13 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
