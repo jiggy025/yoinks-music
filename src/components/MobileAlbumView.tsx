@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft,
   Disc3,
@@ -28,6 +28,137 @@ export interface MobileAlbumViewProps {
   onDownloadTrack: (track: DeezerTrack) => void;
 }
 
+/* =========================================================================
+   AlbumTrackRow Sub-Component
+   ========================================================================= */
+interface AlbumTrackRowProps {
+  track: DeezerTrack;
+  index: number;
+  isActive: boolean;
+  isPlaying: boolean;
+  isDownloading: boolean;
+  isDownloaded: boolean;
+  onToggleTrack: (track: DeezerTrack) => void;
+  onDownloadTrack: (track: DeezerTrack) => void;
+}
+
+const AlbumTrackRow = React.memo<AlbumTrackRowProps>(({
+  track,
+  index,
+  isActive,
+  isPlaying,
+  isDownloading,
+  isDownloaded,
+  onToggleTrack,
+  onDownloadTrack,
+}) => {
+  const isActiveAndPlaying = isActive && isPlaying;
+
+  return (
+    <li
+      className={`min-h-[52px] p-1.5 sm:p-2 rounded-xl border flex items-center gap-2 sm:gap-2.5 transition-colors select-none ${
+        isActive
+          ? 'bg-blue-50/70 border-blue-200/90'
+          : 'bg-white border-slate-200/60 hover:bg-slate-50'
+      }`}
+    >
+      {/* Primary Track Button (Toggles Play/Pause) */}
+      <button
+        type="button"
+        onClick={() => onToggleTrack(track)}
+        aria-label={isActiveAndPlaying ? `Pause ${track.title}` : `Play ${track.title}`}
+        className="flex-1 min-w-0 flex items-center gap-2.5 sm:gap-3 text-left rounded-lg p-1 -m-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+      >
+        {/* Monospace track number or Volume2 playing indicator */}
+        <div className="w-6 flex items-center justify-center flex-shrink-0">
+          {isActiveAndPlaying ? (
+            <>
+              <Volume2 className="w-4 h-4 text-blue-600 animate-pulse" role="img" aria-hidden="true" />
+              <span className="sr-only">Now playing</span>
+            </>
+          ) : (
+            <span
+              className={`font-mono text-xs ${
+                isActive ? 'text-blue-600 font-bold' : 'font-semibold text-slate-600'
+              }`}
+            >
+              #{index + 1}
+            </span>
+          )}
+        </div>
+
+        {/* Track Title */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center">
+          <span
+            className={`text-sm sm:text-base font-semibold truncate ${
+              isActive ? 'text-blue-700' : 'text-slate-900'
+            }`}
+            title={track.title}
+          >
+            {track.title}
+          </span>
+        </div>
+
+        {/* Duration Text */}
+        <span className="font-mono text-xs text-slate-600 shrink-0 pr-1">
+          {track.durationFormatted || formatDuration(track.duration)}
+        </span>
+      </button>
+
+      {/* Action buttons (Clean siblings) */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {/* 1-tap Play / Pause button */}
+        <button
+          type="button"
+          onClick={() => onToggleTrack(track)}
+          aria-label={isActiveAndPlaying ? `Pause ${track.title}` : `Play ${track.title}`}
+          className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-slate-700 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+        >
+          {isActiveAndPlaying ? (
+            <Pause className="w-4 h-4 text-blue-600 fill-blue-600" aria-hidden="true" />
+          ) : (
+            <Play className="w-4 h-4 text-slate-700 fill-slate-700" aria-hidden="true" />
+          )}
+        </button>
+
+        {/* 1-tap Download button */}
+        <button
+          type="button"
+          onClick={() => onDownloadTrack(track)}
+          aria-label={
+            isDownloaded
+              ? `${track.title} downloaded`
+              : isDownloading
+              ? `Downloading ${track.title}`
+              : `Download ${track.title}`
+          }
+          disabled={isDownloading}
+          className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+            isDownloaded
+              ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+              : isDownloading
+              ? 'text-blue-600 bg-blue-50 cursor-wait'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95'
+          }`}
+        >
+          {isDownloading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-blue-600" aria-hidden="true" />
+          ) : isDownloaded ? (
+            <Check className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+          ) : (
+            <Download className="w-4 h-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    </li>
+  );
+});
+
+AlbumTrackRow.displayName = 'AlbumTrackRow';
+
+/* =========================================================================
+   MobileAlbumView Main Component
+   ========================================================================= */
 export const MobileAlbumView: React.FC<MobileAlbumViewProps> = React.memo(({
   album,
   artistName,
@@ -54,31 +185,31 @@ export const MobileAlbumView: React.FC<MobileAlbumViewProps> = React.memo(({
     album.coverMedium ||
     album.cover;
 
-  const isTrackDownloaded = (track: DeezerTrack): boolean => {
+  const isTrackDownloaded = useCallback((track: DeezerTrack): boolean => {
     if (!downloadedIds) return false;
     return (
       downloadedIds.has(String(track.id)) ||
       downloadedIds.has(track.title.toLowerCase().trim())
     );
-  };
+  }, [downloadedIds]);
 
-  const isTrackDownloading = (track: DeezerTrack): boolean => {
+  const isTrackDownloading = useCallback((track: DeezerTrack): boolean => {
     if (downloadingTrackId === null || downloadingTrackId === undefined) return false;
     return String(downloadingTrackId) === String(track.id);
-  };
+  }, [downloadingTrackId]);
 
-  const isTrackActive = (track: DeezerTrack): boolean => {
+  const isTrackActive = useCallback((track: DeezerTrack): boolean => {
     if (activeTrackId === null || activeTrackId === undefined) return false;
     return String(activeTrackId) === String(track.id);
-  };
+  }, [activeTrackId]);
 
-  const handleToggleTrack = (track: DeezerTrack) => {
+  const handleToggleTrack = useCallback((track: DeezerTrack) => {
     if (isTrackActive(track) && isPlaying) {
       onPauseTrack();
     } else {
       onPlayTrack(track);
     }
-  };
+  }, [isTrackActive, isPlaying, onPauseTrack, onPlayTrack]);
 
   const resolvedTrackCount = tracks.length > 0 ? tracks.length : album.trackCount || 0;
 
@@ -136,7 +267,7 @@ export const MobileAlbumView: React.FC<MobileAlbumViewProps> = React.memo(({
           </p>
 
           {/* Release Year & Track Count */}
-          <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-600 mt-0.5">
             {album.releaseYear && <span>{album.releaseYear}</span>}
             {album.releaseYear && resolvedTrackCount > 0 && (
               <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" aria-hidden="true" />
@@ -189,122 +320,27 @@ export const MobileAlbumView: React.FC<MobileAlbumViewProps> = React.memo(({
               <Music className="w-6 h-6" aria-hidden="true" />
             </div>
             <p className="text-sm font-semibold text-slate-900 mt-1">No tracks available</p>
-            <p className="text-xs text-slate-500">No tracks could be found for this album.</p>
+            <p className="text-xs text-slate-600">No tracks could be found for this album.</p>
           </div>
         )}
 
         {/* Ordered Track Rows (#1 to #N) */}
         {!isLoading && tracks.length > 0 && (
-          <div className="space-y-1.5">
-            {tracks.map((track, index) => {
-              const active = isTrackActive(track);
-              const activeAndPlaying = active && isPlaying;
-              const downloading = isTrackDownloading(track);
-              const downloaded = isTrackDownloaded(track);
-
-              return (
-                <div
-                  key={track.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleToggleTrack(track)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleToggleTrack(track);
-                    }
-                  }}
-                  aria-label={`${activeAndPlaying ? 'Pause' : 'Play'} ${track.title}`}
-                  className={`min-h-[52px] p-2 sm:p-2.5 rounded-xl border flex items-center gap-2.5 sm:gap-3 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
-                    active
-                      ? 'bg-blue-50/70 border-blue-200/90'
-                      : 'bg-white border-slate-200/60 hover:bg-slate-50'
-                  }`}
-                >
-                  {/* Monospace track number or Volume2 playing indicator */}
-                  <div className="w-6 flex items-center justify-center flex-shrink-0">
-                    {activeAndPlaying ? (
-                      <Volume2 className="w-4 h-4 text-blue-600 animate-pulse" aria-label="Playing" />
-                    ) : (
-                      <span
-                        className={`font-mono text-xs ${
-                          active ? 'text-blue-600 font-bold' : 'font-semibold text-slate-400'
-                        }`}
-                      >
-                        #{index + 1}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Track Title */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <span
-                      className={`text-sm sm:text-base font-semibold truncate ${
-                        active ? 'text-blue-700' : 'text-slate-900'
-                      }`}
-                      title={track.title}
-                    >
-                      {track.title}
-                    </span>
-                  </div>
-
-                  {/* Duration Text */}
-                  <span className="font-mono text-xs text-slate-500 shrink-0">
-                    {track.durationFormatted || formatDuration(track.duration)}
-                  </span>
-
-                  {/* 1-tap Play / Pause button */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleTrack(track);
-                    }}
-                    aria-label={activeAndPlaying ? `Pause ${track.title}` : `Play ${track.title}`}
-                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-slate-700 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 flex-shrink-0"
-                  >
-                    {activeAndPlaying ? (
-                      <Pause className="w-4 h-4 text-blue-600 fill-blue-600" aria-hidden="true" />
-                    ) : (
-                      <Play className="w-4 h-4 text-slate-700 fill-slate-700" aria-hidden="true" />
-                    )}
-                  </button>
-
-                  {/* 1-tap Download button */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDownloadTrack(track);
-                    }}
-                    aria-label={
-                      downloaded
-                        ? `${track.title} downloaded`
-                        : downloading
-                        ? `Downloading ${track.title}`
-                        : `Download ${track.title}`
-                    }
-                    disabled={downloading}
-                    className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 flex-shrink-0 ${
-                      downloaded
-                        ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
-                        : downloading
-                        ? 'text-blue-600 bg-blue-50 cursor-wait'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95'
-                    }`}
-                  >
-                    {downloading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" aria-hidden="true" />
-                    ) : downloaded ? (
-                      <Check className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-                    ) : (
-                      <Download className="w-4 h-4" aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <ol className="space-y-1.5" role="list">
+            {tracks.map((track, index) => (
+              <AlbumTrackRow
+                key={track.id}
+                track={track}
+                index={index}
+                isActive={isTrackActive(track)}
+                isPlaying={isPlaying}
+                isDownloading={isTrackDownloading(track)}
+                isDownloaded={isTrackDownloaded(track)}
+                onToggleTrack={handleToggleTrack}
+                onDownloadTrack={onDownloadTrack}
+              />
+            ))}
+          </ol>
         )}
       </section>
     </div>
