@@ -69,7 +69,7 @@ export const MobileTopHeader: React.FC<MobileTopHeaderProps> = React.memo(({
               type="button"
               onClick={onOpenSettings}
               aria-label="Settings"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+              className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
             >
               <Settings className="w-5 h-5" aria-hidden="true" />
             </button>

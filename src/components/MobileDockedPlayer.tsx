@@ -126,7 +126,7 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
             </span>
             {playbackSource === 'stream' && (
               <span
-                className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0 uppercase"
+                className="px-2 py-0.5 text-[10px] font-bold tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0 uppercase"
                 aria-label="Full audio stream"
               >
                 FULL
@@ -134,7 +134,7 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
             )}
             {playbackSource === 'preview' && (
               <span
-                className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0 uppercase"
+                className="px-2 py-0.5 text-[10px] font-bold tracking-wider rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0 uppercase"
                 aria-label="30s preview"
               >
                 PREVIEW
@@ -167,7 +167,7 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
           onClick={onNext}
           disabled={!onNext}
           aria-label="Next track"
-          className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+          className={`w-12 h-12 min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
             onNext
               ? 'text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
               : 'text-slate-300 cursor-not-allowed opacity-40'

@@ -87,6 +87,10 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ytBridgeRef = useRef<YouTubeAudioBridgeHandle | null>(null);
   const streamReqIdRef = useRef(0);
+  const streamAbortControllerRef = useRef<AbortController | null>(null);
+  const userPlayIntentRef = useRef<boolean>(false);
+  const isHandoffRef = useRef<boolean>(false);
+  const currentTimeRef = useRef<number>(0);
   const searchReqIdRef = useRef(0);
   const artistReqIdRef = useRef(0);
   const albumReqIdRef = useRef(0);
@@ -102,6 +106,11 @@ export default function App() {
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false);
+
+  // Keep currentTimeRef in sync for stable callbacks
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   // Load streamPreference on initial mount
   useEffect(() => {
@@ -191,18 +200,29 @@ export default function App() {
   // Audio Playback Controls
   const handlePlayTrack = useCallback(
     async (track: AnyPlayableTrack, queue?: AnyPlayableTrack[]) => {
+      // Unconditionally abort previous in-flight stream resolution and increment request ID
+      streamAbortControllerRef.current?.abort();
+      const controller = new AbortController();
+      streamAbortControllerRef.current = controller;
+      const reqId = ++streamReqIdRef.current;
+
+      // Track playback intent and reset handoff flag
+      userPlayIntentRef.current = true;
+      isHandoffRef.current = false;
+
       if (queue) {
         setActiveQueue(queue);
       }
       setActiveTrack(track);
       setIsPlaying(true);
       setCurrentTime(0);
+      currentTimeRef.current = 0;
 
       // Check if track is offline / downloaded without stream
       const isOffline = Boolean(
         ('filePath' in track && track.filePath) ||
         ('fileUri' in track && track.fileUri) ||
-        ('downloadedAt' in track && !('preview' in track) && !('url' in track))
+        ('downloadedAt' in track)
       );
 
       // If track is offline / downloaded without stream: play via HTML5 audio
@@ -227,7 +247,6 @@ export default function App() {
       }
 
       if (streamPreference === 'full') {
-        const reqId = ++streamReqIdRef.current;
         const previewUrl = getTrackAudioUrl(track);
 
         // Instant 0ms feedback: if track has preview URL, start playing preview on HTML5 audio immediately
@@ -243,7 +262,7 @@ export default function App() {
           });
         }
 
-        // Concurrently call resolveTrackStream(track.title, artistName)
+        // Concurrently call resolveTrackStream(track.title, artistName, controller.signal)
         let artistName = 'Unknown Artist';
         if ('artist' in track && track.artist) {
           if (typeof track.artist === 'string') {
@@ -260,29 +279,27 @@ export default function App() {
         }
 
         try {
-          const resolved = await resolveTrackStream(track.title, artistName);
-          // When resolved and request ID matches:
-          if (reqId === streamReqIdRef.current) {
+          const resolved = await resolveTrackStream(track.title, artistName, controller.signal);
+          // Only trigger loadAndPlay if request ID matches and user play intent is still active
+          if (reqId === streamReqIdRef.current && userPlayIntentRef.current) {
             if (resolved && resolved.videoId) {
-              // Pause and silence HTML5 audio
-              if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.currentTime = 0;
-              }
-              // Invoke ytBridgeRef.current?.loadAndPlay(resolved.videoId)
+              // Smooth handoff: maintain isHandoffRef and let preview keep playing until YouTube bridge fires 'playing'
+              isHandoffRef.current = true;
               ytBridgeRef.current?.loadAndPlay(resolved.videoId);
               setPlaybackSource('stream');
               if (resolved.duration && resolved.duration > 0) {
                 setDuration(resolved.duration);
               }
             } else {
-              // If resolution returns null or errors: keep HTML5 audio playing as graceful fallback
+              isHandoffRef.current = false;
+              // If resolution returns null: keep HTML5 audio playing as graceful fallback
               setPlaybackSource('preview');
             }
           }
         } catch (err) {
           console.warn('[streamResolver] Resolution error, falling back to preview:', err);
           if (reqId === streamReqIdRef.current) {
+            isHandoffRef.current = false;
             setPlaybackSource('preview');
           }
         }
@@ -318,31 +335,36 @@ export default function App() {
 
   const handlePrevious = useCallback(() => {
     if (playbackSource === 'stream') {
-      const ytTime = ytBridgeRef.current?.getCurrentTime() || currentTime;
+      const ytTime = ytBridgeRef.current?.getCurrentTime() ?? currentTimeRef.current;
       if (ytTime > 3) {
         ytBridgeRef.current?.seekTo(0);
         setCurrentTime(0);
+        currentTimeRef.current = 0;
         return;
       }
     } else if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       setCurrentTime(0);
+      currentTimeRef.current = 0;
       return;
     }
     if (currentQueueIndex > 0) {
       const prevTrack = activeQueue[currentQueueIndex - 1];
       handlePlayTrack(prevTrack);
     }
-  }, [currentQueueIndex, activeQueue, handlePlayTrack, playbackSource, currentTime]);
+  }, [currentQueueIndex, activeQueue, handlePlayTrack, playbackSource]);
 
   const handlePlayPause = useCallback(() => {
     if (!activeTrack) return;
 
     if (playbackSource === 'stream') {
       if (isPlaying) {
+        userPlayIntentRef.current = false;
+        isHandoffRef.current = false;
         ytBridgeRef.current?.pause();
         setIsPlaying(false);
       } else {
+        userPlayIntentRef.current = true;
         ytBridgeRef.current?.play();
         setIsPlaying(true);
       }
@@ -352,9 +374,12 @@ export default function App() {
       if (!audio) return;
 
       if (isPlaying) {
+        userPlayIntentRef.current = false;
+        isHandoffRef.current = false;
         audio.pause();
         setIsPlaying(false);
       } else {
+        userPlayIntentRef.current = true;
         if (!audio.src) {
           audio.src = getTrackAudioUrl(activeTrack);
         }
@@ -372,6 +397,8 @@ export default function App() {
   }, [isPlaying, activeTrack, playbackSource]);
 
   const handlePauseTrack = useCallback(() => {
+    userPlayIntentRef.current = false;
+    isHandoffRef.current = false;
     if (playbackSource === 'stream') {
       ytBridgeRef.current?.pause();
     } else if (audioRef.current) {
@@ -383,6 +410,7 @@ export default function App() {
   const handleSeek = useCallback(
     (timeSec: number) => {
       setCurrentTime(timeSec);
+      currentTimeRef.current = timeSec;
       if (playbackSource === 'stream') {
         ytBridgeRef.current?.seekTo(timeSec);
       } else if (audioRef.current) {
@@ -411,25 +439,31 @@ export default function App() {
   );
 
   const handleToggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      if (audioRef.current) {
-        audioRef.current.muted = next;
-      }
-      ytBridgeRef.current?.setVolume(next ? 0 : volume);
-      return next;
-    });
-  }, [volume]);
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (audioRef.current) {
+      audioRef.current.muted = nextMuted;
+    }
+    ytBridgeRef.current?.setVolume(nextMuted ? 0 : volume);
+  }, [isMuted, volume]);
 
   // YouTube Audio Bridge Event Handlers
   const handleYtStateChange = useCallback(
     (state: YTPlaybackState) => {
       if (playbackSource === 'stream') {
         if (state === 'playing') {
+          // Pause HTML5 preview immediately upon YouTube playing
+          if (audioRef.current && !audioRef.current.paused) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
+          isHandoffRef.current = false;
           setIsPlaying(true);
         } else if (state === 'paused') {
+          isHandoffRef.current = false;
           setIsPlaying(false);
         } else if (state === 'ended') {
+          isHandoffRef.current = false;
           if (hasNext) {
             handleNext();
           } else {
@@ -445,6 +479,7 @@ export default function App() {
     (time: number, dur: number) => {
       if (playbackSource === 'stream') {
         setCurrentTime(time);
+        currentTimeRef.current = time;
         if (dur > 0) {
           setDuration(dur);
         }
@@ -456,6 +491,7 @@ export default function App() {
   const handleYtError = useCallback(
     (errorCode: number) => {
       console.warn('[YouTubeAudioBridge] Error code:', errorCode);
+      isHandoffRef.current = false;
       if (playbackSource === 'stream') {
         // Fallback to HTML5 audio preview if available
         const previewUrl = activeTrack ? getTrackAudioUrl(activeTrack) : '';
@@ -478,7 +514,9 @@ export default function App() {
   // Audio Element Event Handlers
   const handleTimeUpdate = useCallback(() => {
     if (playbackSource !== 'stream' && audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime || 0);
+      const cur = audioRef.current.currentTime || 0;
+      setCurrentTime(cur);
+      currentTimeRef.current = cur;
     }
   }, [playbackSource]);
 
@@ -489,7 +527,7 @@ export default function App() {
   }, [playbackSource]);
 
   const handleAudioEnded = useCallback(() => {
-    if (playbackSource !== 'stream') {
+    if (playbackSource !== 'stream' && !isHandoffRef.current) {
       if (hasNext) {
         handleNext();
       } else {
@@ -499,7 +537,7 @@ export default function App() {
   }, [playbackSource, hasNext, handleNext]);
 
   const handleAudioError = useCallback(() => {
-    if (playbackSource !== 'stream') {
+    if (playbackSource !== 'stream' && !isHandoffRef.current) {
       console.warn('[Audio Engine] HTML5 Playback error encountered gracefully.');
       setIsPlaying(false);
     }
@@ -729,6 +767,19 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    setActiveTab('settings');
+    setCurrentView('settings');
+  }, []);
+
+  const handleExpandPlayerSheet = useCallback(() => {
+    setIsPlayerSheetOpen(true);
+  }, []);
+
+  const handleClosePlayerSheet = useCallback(() => {
+    setIsPlayerSheetOpen(false);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-100 select-none">
       {/* Hidden single HTML5 <audio> engine mounted at root */}
@@ -745,7 +796,7 @@ export default function App() {
           }
         }}
         onPause={() => {
-          if (playbackSource !== 'stream') {
+          if (!isHandoffRef.current && playbackSource !== 'stream') {
             setIsPlaying(false);
           }
         }}
@@ -763,10 +814,7 @@ export default function App() {
       <MobileTopHeader
         title="Yoinks Music"
         playbackSource={playbackSource}
-        onOpenSettings={() => {
-          setActiveTab('settings');
-          setCurrentView('settings');
-        }}
+        onOpenSettings={handleOpenSettings}
       />
 
       {/* Main Scrollable Canvas with Safe Padding (pb-36 prevents overlap with docked player and bottom nav) */}
@@ -1107,7 +1155,7 @@ export default function App() {
               playbackSource={playbackSource}
               onPlayPause={handlePlayPause}
               onNext={hasNext ? handleNext : undefined}
-              onExpand={() => setIsPlayerSheetOpen(true)}
+              onExpand={handleExpandPlayerSheet}
             />
           </div>
         </div>
@@ -1129,7 +1177,7 @@ export default function App() {
         onToggleMute={handleToggleMute}
         onNext={hasNext ? handleNext : undefined}
         onPrevious={hasPrev ? handlePrevious : undefined}
-        onClose={() => setIsPlayerSheetOpen(false)}
+        onClose={handleClosePlayerSheet}
         onDownload={handleDownloadTrack}
         isDownloaded={
           activeTrack

@@ -395,7 +395,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               type="button"
               onClick={handleMuteClick}
               aria-label={isVolumeMuted ? 'Unmute volume' : 'Mute volume'}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+              className="min-w-[48px] min-h-[48px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
             >
               {isVolumeMuted ? (
                 <VolumeX className="w-5 h-5 text-slate-500" />
