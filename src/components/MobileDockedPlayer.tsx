@@ -24,10 +24,17 @@ export function extractTrackMeta(track: AnyPlayableTrack | null): {
   const title = track.title || 'Unknown Track';
 
   let artist = 'Unknown Artist';
-  if (typeof (track as any).artist === 'string') {
-    artist = (track as any).artist;
-  } else if ((track as DeezerTrack).artist?.name) {
-    artist = (track as DeezerTrack).artist.name;
+  if ('artist' in track && track.artist) {
+    if (typeof track.artist === 'string') {
+      artist = track.artist;
+    } else if (
+      typeof track.artist === 'object' &&
+      'name' in track.artist &&
+      typeof track.artist.name === 'string' &&
+      track.artist.name
+    ) {
+      artist = track.artist.name;
+    }
   }
 
   let cover = '';
@@ -106,7 +113,7 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
       <button
         type="button"
         onClick={onExpand}
-        aria-label="Open now playing player"
+        aria-label={`Now playing: ${title} by ${artist}. Open full player`}
         className="flex-1 min-w-0 flex items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl p-0.5 transition-opacity active:opacity-90 cursor-pointer"
       >
         <DockedTrackArtwork cover={cover} title={title} isPlaying={isPlaying} />
@@ -126,7 +133,7 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
           type="button"
           onClick={onPlayPause}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="w-11 h-11 min-w-[44px] min-h-[44px] text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full flex items-center justify-center active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+          className="w-12 h-12 min-w-[48px] min-h-[48px] text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full flex items-center justify-center active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
         >
           {isPlaying ? (
             <Pause className="w-5 h-5 fill-current" />

@@ -29,7 +29,7 @@ export const MobileBottomNav = React.memo<MobileBottomNavProps>(({
       role="navigation"
       aria-label="Main Navigation"
       data-testid="mobile-bottom-nav"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 pb-safe-bottom select-none"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 pb-[max(0.5rem,env(safe-area-inset-bottom))] select-none"
     >
       <div className="flex items-center justify-around max-w-md mx-auto px-2">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
@@ -40,8 +40,6 @@ export const MobileBottomNav = React.memo<MobileBottomNavProps>(({
               key={id}
               type="button"
               onClick={() => onSelectTab(id)}
-              role="tab"
-              aria-selected={isActive}
               aria-current={isActive ? 'page' : undefined}
               aria-label={label}
               className={`min-h-[52px] flex-1 flex flex-col items-center justify-center gap-1 py-1.5 px-2 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl cursor-pointer ${

@@ -98,7 +98,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
 
   // Close on Escape key press
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !track) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -108,11 +108,11 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, track, onClose]);
 
   // Lock body scroll when sheet is open
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !track) return;
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -120,7 +120,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [isOpen]);
+  }, [isOpen, track]);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -134,7 +134,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   const handleSeekChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = parseFloat(e.target.value);
-      if (!Number.isNaN(val)) {
+      if (!Number.isNaN(val) && Number.isFinite(val)) {
         onSeek(val);
       }
     },
@@ -144,8 +144,8 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   const handleVolumeInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = parseFloat(e.target.value);
-      if (!Number.isNaN(val)) {
-        onVolumeChange(val);
+      if (!Number.isNaN(val) && Number.isFinite(val)) {
+        onVolumeChange(Math.max(0, Math.min(1, val)));
       }
     },
     [onVolumeChange]
@@ -165,8 +165,11 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   }
 
   const { title, artist, cover } = extractTrackMeta(track);
-  const maxDuration = duration > 0 ? duration : 100;
-  const clampedCurrentTime = Math.min(Math.max(0, currentTime), maxDuration);
+
+  // Safe numerical guards for scrubber
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const safeCurrentTime = Number.isFinite(currentTime) && currentTime >= 0 ? currentTime : 0;
+  const clampedCurrentTime = safeDuration > 0 ? Math.min(safeCurrentTime, safeDuration) : 0;
   const isVolumeMuted = isMuted || volume <= 0.001;
 
   return (
@@ -180,7 +183,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
     >
       <div
         data-testid="mobile-player-sheet"
-        className="w-full max-h-[92vh] h-full bg-white rounded-t-3xl border-t border-slate-200/80 shadow-2xl flex flex-col justify-between p-5 pt-3 pb-safe-bottom overflow-y-auto"
+        className="w-full max-h-[92vh] h-full bg-white rounded-t-3xl border-t border-slate-200/80 shadow-2xl flex flex-col justify-between p-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto"
       >
         {/* Top Section: Drag Handle & Header Row */}
         <div>
@@ -261,20 +264,25 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               <input
                 type="range"
                 min={0}
-                max={maxDuration}
+                max={safeDuration > 0 ? safeDuration : 100}
                 step={0.5}
+                disabled={safeDuration === 0}
                 value={clampedCurrentTime}
                 onChange={handleSeekChange}
                 aria-label="Seek track position"
-                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className={`w-full h-2 rounded-lg appearance-none accent-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  safeDuration === 0
+                    ? 'bg-slate-100 cursor-not-allowed'
+                    : 'bg-slate-200 cursor-pointer'
+                }`}
               />
             </div>
             <div className="flex items-center justify-between mt-1.5 px-0.5 select-none">
               <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {formatDuration(currentTime)}
+                {formatDuration(safeCurrentTime)}
               </span>
               <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {formatDuration(duration)}
+                {formatDuration(safeDuration)}
               </span>
             </div>
           </div>
@@ -289,7 +297,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 cursor-pointer ${
                 isShuffle
                   ? 'text-blue-600 bg-blue-50 font-bold'
-                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <Shuffle className="w-5 h-5" />
@@ -347,7 +355,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 cursor-pointer ${
                 isRepeat
                   ? 'text-blue-600 bg-blue-50 font-bold'
-                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <Repeat className="w-5 h-5" />
@@ -360,7 +368,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               type="button"
               onClick={handleMuteClick}
               aria-label={isVolumeMuted ? 'Unmute volume' : 'Mute volume'}
-              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
             >
               {isVolumeMuted ? (
                 <VolumeX className="w-5 h-5 text-slate-500" />
