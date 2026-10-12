@@ -4,11 +4,20 @@ import { formatDuration } from '../utils/formatters';
 const DEEZER_BASE_URL = 'https://api.deezer.com';
 const REQUEST_TIMEOUT_MS = 10_000;
 
+function createSignal(callerSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  if (!callerSignal) return timeoutSignal;
+  if (typeof (AbortSignal as any).any === 'function') {
+    return (AbortSignal as any).any([callerSignal, timeoutSignal]);
+  }
+  return callerSignal;
+}
+
 /**
  * Searches for artists matching query using Deezer public search API.
  * Returns empty array on rate limits, negative/empty query, or network errors.
  */
-export async function searchDeezerArtist(query: string): Promise<DeezerArtist[]> {
+export async function searchDeezerArtist(query: string, callerSignal?: AbortSignal): Promise<DeezerArtist[]> {
   if (!query || typeof query !== 'string' || !query.trim()) {
     return [];
   }
@@ -16,8 +25,9 @@ export async function searchDeezerArtist(query: string): Promise<DeezerArtist[]>
 
   try {
     const url = `${DEEZER_BASE_URL}/search/artist?q=${encodeURIComponent(trimmed)}&limit=10`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const res = await fetch(url, { signal: createSignal(callerSignal) });
     if (!res.ok) {
+      console.warn(`[Deezer API] searchDeezerArtist HTTP ${res.status}: ${res.statusText}`);
       return [];
     }
     const json = await res.json();
@@ -41,7 +51,10 @@ export async function searchDeezerArtist(query: string): Promise<DeezerArtist[]>
       nbFan: typeof item.nb_fan === 'number' ? item.nb_fan : Number(item.nb_fan) || 0,
       tracklist: item.tracklist || '',
     }));
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return [];
+    }
     console.error('[Deezer API] searchDeezerArtist error:', error);
     return [];
   }
@@ -51,15 +64,16 @@ export async function searchDeezerArtist(query: string): Promise<DeezerArtist[]>
  * Fetches top tracks for an artist by ID.
  * Returns up to 25 top tracks with formatted durations and preview URLs.
  */
-export async function getArtistTopTracks(artistId: number): Promise<DeezerTrack[]> {
+export async function getArtistTopTracks(artistId: number, callerSignal?: AbortSignal): Promise<DeezerTrack[]> {
   if (typeof artistId !== 'number' || !Number.isFinite(artistId) || artistId <= 0) {
     return [];
   }
 
   try {
     const url = `${DEEZER_BASE_URL}/artist/${artistId}/top?limit=25`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const res = await fetch(url, { signal: createSignal(callerSignal) });
     if (!res.ok) {
+      console.warn(`[Deezer API] getArtistTopTracks HTTP ${res.status}: ${res.statusText}`);
       return [];
     }
     const json = await res.json();
@@ -92,7 +106,10 @@ export async function getArtistTopTracks(artistId: number): Promise<DeezerTrack[
         },
       };
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return [];
+    }
     console.error('[Deezer API] getArtistTopTracks error:', error);
     return [];
   }
@@ -102,15 +119,16 @@ export async function getArtistTopTracks(artistId: number): Promise<DeezerTrack[
  * Fetches albums for an artist by ID.
  * Returns up to 50 albums with releaseYear extracted from release_date.
  */
-export async function getArtistAlbums(artistId: number): Promise<DeezerAlbum[]> {
+export async function getArtistAlbums(artistId: number, callerSignal?: AbortSignal): Promise<DeezerAlbum[]> {
   if (typeof artistId !== 'number' || !Number.isFinite(artistId) || artistId <= 0) {
     return [];
   }
 
   try {
     const url = `${DEEZER_BASE_URL}/artist/${artistId}/albums?limit=50`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const res = await fetch(url, { signal: createSignal(callerSignal) });
     if (!res.ok) {
+      console.warn(`[Deezer API] getArtistAlbums HTTP ${res.status}: ${res.statusText}`);
       return [];
     }
     const json = await res.json();
@@ -137,7 +155,10 @@ export async function getArtistAlbums(artistId: number): Promise<DeezerAlbum[]> 
         trackCount: typeof item.nb_tracks === 'number' ? item.nb_tracks : undefined,
       };
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return [];
+    }
     console.error('[Deezer API] getArtistAlbums error:', error);
     return [];
   }
@@ -147,15 +168,16 @@ export async function getArtistAlbums(artistId: number): Promise<DeezerAlbum[]> 
  * Fetches tracks for an album by ID.
  * Returns up to 50 tracks mapped to DeezerTrack.
  */
-export async function getAlbumTracks(albumId: number): Promise<DeezerTrack[]> {
+export async function getAlbumTracks(albumId: number, callerSignal?: AbortSignal): Promise<DeezerTrack[]> {
   if (typeof albumId !== 'number' || !Number.isFinite(albumId) || albumId <= 0) {
     return [];
   }
 
   try {
     const url = `${DEEZER_BASE_URL}/album/${albumId}/tracks?limit=50`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const res = await fetch(url, { signal: createSignal(callerSignal) });
     if (!res.ok) {
+      console.warn(`[Deezer API] getAlbumTracks HTTP ${res.status}: ${res.statusText}`);
       return [];
     }
     const json = await res.json();
@@ -192,7 +214,10 @@ export async function getAlbumTracks(albumId: number): Promise<DeezerTrack[]> {
         },
       };
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return [];
+    }
     console.error('[Deezer API] getAlbumTracks error:', error);
     return [];
   }

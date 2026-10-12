@@ -96,6 +96,8 @@ async function removeRaw(key: string): Promise<void> {
   inMemoryFallback.delete(key);
 }
 
+const MAX_STORED_TRACKS = 100;
+
 /**
  * Retrieves the stored list of recent tracks.
  * Returns empty array if none stored, corrupted, or on error.
@@ -108,7 +110,15 @@ export async function getStoredTracks(): Promise<RecentTrack[]> {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed;
+      return parsed.filter((item): item is RecentTrack =>
+        Boolean(
+          item &&
+          typeof item === 'object' &&
+          'id' in item &&
+          item.id != null &&
+          String(item.id).trim().length > 0
+        )
+      );
     }
     return [];
   } catch (error) {
@@ -120,21 +130,28 @@ export async function getStoredTracks(): Promise<RecentTrack[]> {
 /**
  * Adds a track to recent tracks storage.
  * Deduplicates by ID and prepends the new track to the start of the list.
+ * Bounded by MAX_STORED_TRACKS to prevent unbounded storage growth.
  */
 export async function addStoredTrack(track: RecentTrack): Promise<RecentTrack[]> {
   if (!track || (typeof track.id !== 'string' && typeof track.id !== 'number')) {
     return await getStoredTracks();
   }
 
+  const cleanId = String(track.id).trim();
+  if (!cleanId) {
+    return await getStoredTracks();
+  }
+
   const normalizedTrack: RecentTrack = {
     ...track,
-    id: String(track.id),
+    id: cleanId,
+    downloadedAt: track.downloadedAt || Date.now(),
   };
 
   try {
     const current = await getStoredTracks();
-    const filtered = current.filter((t) => String(t.id) !== normalizedTrack.id);
-    const updated = [normalizedTrack, ...filtered];
+    const filtered = current.filter((t) => String(t.id).trim() !== cleanId);
+    const updated = [normalizedTrack, ...filtered].slice(0, MAX_STORED_TRACKS);
     await setRaw(RECENT_TRACKS_KEY, JSON.stringify(updated));
     return updated;
   } catch (error) {
