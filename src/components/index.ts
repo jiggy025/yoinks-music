@@ -7,3 +7,4 @@ export * from './MobileDockedPlayer';
 export * from './MobilePlayerSheet';
 export * from './MobileBottomNav';
 export * from './MobileLibraryView';
+export * from './YouTubeAudioBridge';
