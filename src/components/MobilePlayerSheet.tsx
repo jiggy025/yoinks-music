@@ -13,9 +13,11 @@ import {
   Repeat,
   Volume2,
   VolumeX,
+  Sparkles,
 } from 'lucide-react';
 import { AnyPlayableTrack, extractTrackMeta } from './MobileDockedPlayer';
 import { formatDuration } from '../utils/formatters';
+import type { PlaybackSource } from '../types';
 
 export interface MobilePlayerSheetProps {
   isOpen: boolean;
@@ -25,6 +27,7 @@ export interface MobilePlayerSheetProps {
   duration: number;
   volume: number;
   isMuted?: boolean;
+  playbackSource?: PlaybackSource;
   onPlayPause: () => void;
   onSeek: (timeSec: number) => void;
   onVolumeChange: (volume: number) => void;
@@ -82,6 +85,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   duration,
   volume,
   isMuted = false,
+  playbackSource,
   onPlayPause,
   onSeek,
   onVolumeChange,
@@ -203,16 +207,39 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
             </button>
 
             {/* Center: Badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full border border-slate-200/70">
-              <Disc3
-                className={`w-3.5 h-3.5 text-blue-600 ${isPlaying ? 'animate-spin' : ''}`}
-                style={{ animationDuration: '4s' }}
-                aria-hidden="true"
-              />
-              <span className="text-[11px] font-bold tracking-wider text-slate-700 uppercase">
-                NOW PLAYING
-              </span>
-            </div>
+            {playbackSource === 'stream' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-200/80">
+                <Sparkles
+                  className={`w-3.5 h-3.5 text-emerald-600 ${isPlaying ? 'animate-pulse' : ''}`}
+                  aria-hidden="true"
+                />
+                <span className="text-[11px] font-bold tracking-wider text-emerald-700 uppercase">
+                  FULL AUDIO
+                </span>
+              </div>
+            ) : playbackSource === 'preview' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 rounded-full border border-amber-200/80">
+                <Disc3
+                  className={`w-3.5 h-3.5 text-amber-600 ${isPlaying ? 'animate-spin' : ''}`}
+                  style={{ animationDuration: '4s' }}
+                  aria-hidden="true"
+                />
+                <span className="text-[11px] font-bold tracking-wider text-amber-700 uppercase">
+                  30s PREVIEW
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full border border-slate-200/70">
+                <Disc3
+                  className={`w-3.5 h-3.5 text-blue-600 ${isPlaying ? 'animate-spin' : ''}`}
+                  style={{ animationDuration: '4s' }}
+                  aria-hidden="true"
+                />
+                <span className="text-[11px] font-bold tracking-wider text-slate-700 uppercase">
+                  {playbackSource === 'offline' ? 'OFFLINE' : 'NOW PLAYING'}
+                </span>
+              </div>
+            )}
 
             {/* Right: Download or Placeholder */}
             {onDownload ? (

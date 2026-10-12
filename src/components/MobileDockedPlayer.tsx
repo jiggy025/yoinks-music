@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, SkipForward, Disc3 } from 'lucide-react';
-import { DeezerTrack, SearchResult, RecentTrack } from '../types';
+import { DeezerTrack, SearchResult, RecentTrack, PlaybackSource } from '../types';
 
 export type AnyPlayableTrack = DeezerTrack | SearchResult | RecentTrack;
 
 export interface MobileDockedPlayerProps {
   track: AnyPlayableTrack | null;
   isPlaying: boolean;
+  playbackSource?: PlaybackSource;
   onPlayPause: () => void;
   onNext?: () => void;
   onExpand: () => void;
@@ -94,6 +95,7 @@ DockedTrackArtwork.displayName = 'DockedTrackArtwork';
 export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
   track,
   isPlaying,
+  playbackSource,
   onPlayPause,
   onNext,
   onExpand,
@@ -118,9 +120,27 @@ export const MobileDockedPlayer = React.memo<MobileDockedPlayerProps>(({
       >
         <DockedTrackArtwork cover={cover} title={title} isPlaying={isPlaying} />
         <div className="flex-1 min-w-0 flex flex-col justify-center">
-          <span className="text-sm font-bold text-slate-900 truncate block leading-snug">
-            {title}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-bold text-slate-900 truncate leading-snug">
+              {title}
+            </span>
+            {playbackSource === 'stream' && (
+              <span
+                className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0 uppercase"
+                aria-label="Full audio stream"
+              >
+                FULL
+              </span>
+            )}
+            {playbackSource === 'preview' && (
+              <span
+                className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0 uppercase"
+                aria-label="30s preview"
+              >
+                PREVIEW
+              </span>
+            )}
+          </div>
           <span className="text-xs text-slate-600 font-medium truncate block leading-tight mt-0.5">
             {artist}
           </span>

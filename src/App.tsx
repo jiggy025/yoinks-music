@@ -7,12 +7,14 @@ import {
   Info,
   Music2,
   Sparkles,
+  Radio,
 } from 'lucide-react';
 import type {
   DeezerArtist,
   DeezerTrack,
   DeezerAlbum,
   RecentTrack,
+  PlaybackSource,
 } from './types';
 import {
   MobileTopHeader,
@@ -24,9 +26,13 @@ import {
   MobilePlayerSheet,
   MobileBottomNav,
   MobileLibraryView,
+  YouTubeAudioBridge,
+  type YouTubeAudioBridgeHandle,
+  type YTPlaybackState,
   type MobileTab,
   type AnyPlayableTrack,
 } from './components';
+import { Preferences } from '@capacitor/preferences';
 import {
   searchDeezerArtist,
   getArtistTopTracks,
@@ -39,6 +45,7 @@ import {
   removeStoredTrack,
   clearStoredTracks,
 } from './services/mobileStorage';
+import { resolveTrackStream } from './services/streamResolver';
 
 function getTrackAudioUrl(track: AnyPlayableTrack | null): string {
   if (!track) return '';
@@ -78,9 +85,14 @@ export default function App() {
 
   // Audio Engine State
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytBridgeRef = useRef<YouTubeAudioBridgeHandle | null>(null);
+  const streamReqIdRef = useRef(0);
   const searchReqIdRef = useRef(0);
   const artistReqIdRef = useRef(0);
   const albumReqIdRef = useRef(0);
+
+  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>('stream');
+  const [streamPreference, setStreamPreference] = useState<'full' | 'preview'>('full');
 
   const [activeTrack, setActiveTrack] = useState<AnyPlayableTrack | null>(null);
   const [activeQueue, setActiveQueue] = useState<AnyPlayableTrack[]>([]);
@@ -90,6 +102,40 @@ export default function App() {
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false);
+
+  // Load streamPreference on initial mount
+  useEffect(() => {
+    Preferences.get({ key: 'stream_preference' })
+      .then(({ value }) => {
+        if (value === 'full' || value === 'preview') {
+          setStreamPreference(value);
+        } else if (typeof window !== 'undefined' && window.localStorage) {
+          const local = window.localStorage.getItem('stream_preference');
+          if (local === 'full' || local === 'preview') {
+            setStreamPreference(local as 'full' | 'preview');
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('[Preferences] Load stream_preference error:', err);
+      });
+  }, []);
+
+  const handleSetStreamPreference = useCallback(async (pref: 'full' | 'preview') => {
+    setStreamPreference(pref);
+    try {
+      await Preferences.set({ key: 'stream_preference', value: pref });
+    } catch (err) {
+      console.warn('[Preferences] Set stream_preference error:', err);
+    }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem('stream_preference', pref);
+      } catch {
+        // Non-fatal
+      }
+    }
+  }, []);
 
   // Load offline stored tracks on initial mount
   useEffect(() => {
@@ -144,64 +190,124 @@ export default function App() {
 
   // Audio Playback Controls
   const handlePlayTrack = useCallback(
-    (track: AnyPlayableTrack, queue?: AnyPlayableTrack[]) => {
+    async (track: AnyPlayableTrack, queue?: AnyPlayableTrack[]) => {
       if (queue) {
         setActiveQueue(queue);
       }
       setActiveTrack(track);
       setIsPlaying(true);
+      setCurrentTime(0);
 
-      const audio = audioRef.current;
-      if (audio) {
-        const streamUrl = getTrackAudioUrl(track);
-        if (!streamUrl) {
-          console.warn('[Audio Engine] No playable audio stream available for track:', track);
-          setIsPlaying(false);
-          return;
+      // Check if track is offline / downloaded without stream
+      const isOffline = Boolean(
+        ('filePath' in track && track.filePath) ||
+        ('fileUri' in track && track.fileUri) ||
+        ('downloadedAt' in track && !('preview' in track) && !('url' in track))
+      );
+
+      // If track is offline / downloaded without stream: play via HTML5 audio
+      if (isOffline) {
+        setPlaybackSource('offline');
+        ytBridgeRef.current?.pause();
+        const audio = audioRef.current;
+        if (audio) {
+          const localUrl = getTrackAudioUrl(track);
+          if (localUrl) {
+            if (audio.src !== localUrl) {
+              audio.src = localUrl;
+              audio.currentTime = 0;
+            }
+            audio.play().catch((err) => {
+              console.warn('[Audio Engine] Offline play error:', err);
+              setIsPlaying(false);
+            });
+          }
+        }
+        return;
+      }
+
+      if (streamPreference === 'full') {
+        const reqId = ++streamReqIdRef.current;
+        const previewUrl = getTrackAudioUrl(track);
+
+        // Instant 0ms feedback: if track has preview URL, start playing preview on HTML5 audio immediately
+        if (previewUrl && audioRef.current) {
+          setPlaybackSource('preview');
+          const audio = audioRef.current;
+          if (audio.src !== previewUrl) {
+            audio.src = previewUrl;
+            audio.currentTime = 0;
+          }
+          audio.play().catch((err) => {
+            console.warn('[Audio Engine] Instant preview play error:', err);
+          });
         }
 
-        if (audio.src !== streamUrl) {
-          audio.src = streamUrl;
-          audio.currentTime = 0;
+        // Concurrently call resolveTrackStream(track.title, artistName)
+        let artistName = 'Unknown Artist';
+        if ('artist' in track && track.artist) {
+          if (typeof track.artist === 'string') {
+            artistName = track.artist;
+          } else if (
+            typeof track.artist === 'object' &&
+            'name' in track.artist &&
+            track.artist.name
+          ) {
+            artistName = track.artist.name;
+          }
+        } else if (selectedArtist?.name) {
+          artistName = selectedArtist.name;
         }
-        audio.play().catch((err) => {
-          console.warn('[Audio Engine] Play error:', err);
-          setIsPlaying(false);
-        });
+
+        try {
+          const resolved = await resolveTrackStream(track.title, artistName);
+          // When resolved and request ID matches:
+          if (reqId === streamReqIdRef.current) {
+            if (resolved && resolved.videoId) {
+              // Pause and silence HTML5 audio
+              if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+              }
+              // Invoke ytBridgeRef.current?.loadAndPlay(resolved.videoId)
+              ytBridgeRef.current?.loadAndPlay(resolved.videoId);
+              setPlaybackSource('stream');
+              if (resolved.duration && resolved.duration > 0) {
+                setDuration(resolved.duration);
+              }
+            } else {
+              // If resolution returns null or errors: keep HTML5 audio playing as graceful fallback
+              setPlaybackSource('preview');
+            }
+          }
+        } catch (err) {
+          console.warn('[streamResolver] Resolution error, falling back to preview:', err);
+          if (reqId === streamReqIdRef.current) {
+            setPlaybackSource('preview');
+          }
+        }
+      } else {
+        // streamPreference === 'preview'
+        setPlaybackSource('preview');
+        ytBridgeRef.current?.pause();
+        const audio = audioRef.current;
+        if (audio) {
+          const streamUrl = getTrackAudioUrl(track);
+          if (streamUrl) {
+            if (audio.src !== streamUrl) {
+              audio.src = streamUrl;
+              audio.currentTime = 0;
+            }
+            audio.play().catch((err) => {
+              console.warn('[Audio Engine] Preview play error:', err);
+              setIsPlaying(false);
+            });
+          }
+        }
       }
     },
-    []
+    [selectedArtist, streamPreference]
   );
-
-  const handlePauseTrack = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    setIsPlaying(false);
-  }, []);
-
-  const handlePlayPause = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !activeTrack) return;
-
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-    } else {
-      if (!audio.src) {
-        audio.src = getTrackAudioUrl(activeTrack);
-      }
-      audio
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.warn('[Audio Engine] Play error:', err);
-          setIsPlaying(false);
-        });
-    }
-  }, [isPlaying, activeTrack]);
 
   const handleNext = useCallback(() => {
     if (currentQueueIndex >= 0 && currentQueueIndex < activeQueue.length - 1) {
@@ -211,7 +317,14 @@ export default function App() {
   }, [currentQueueIndex, activeQueue, handlePlayTrack]);
 
   const handlePrevious = useCallback(() => {
-    if (audioRef.current && audioRef.current.currentTime > 3) {
+    if (playbackSource === 'stream') {
+      const ytTime = ytBridgeRef.current?.getCurrentTime() || currentTime;
+      if (ytTime > 3) {
+        ytBridgeRef.current?.seekTo(0);
+        setCurrentTime(0);
+        return;
+      }
+    } else if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       setCurrentTime(0);
       return;
@@ -220,14 +333,64 @@ export default function App() {
       const prevTrack = activeQueue[currentQueueIndex - 1];
       handlePlayTrack(prevTrack);
     }
-  }, [currentQueueIndex, activeQueue, handlePlayTrack]);
+  }, [currentQueueIndex, activeQueue, handlePlayTrack, playbackSource, currentTime]);
 
-  const handleSeek = useCallback((timeSec: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = timeSec;
-      setCurrentTime(timeSec);
+  const handlePlayPause = useCallback(() => {
+    if (!activeTrack) return;
+
+    if (playbackSource === 'stream') {
+      if (isPlaying) {
+        ytBridgeRef.current?.pause();
+        setIsPlaying(false);
+      } else {
+        ytBridgeRef.current?.play();
+        setIsPlaying(true);
+      }
+    } else {
+      // 'preview' or 'offline'
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      if (isPlaying) {
+        audio.pause();
+        setIsPlaying(false);
+      } else {
+        if (!audio.src) {
+          audio.src = getTrackAudioUrl(activeTrack);
+        }
+        audio
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            console.warn('[Audio Engine] Play error:', err);
+            setIsPlaying(false);
+          });
+      }
     }
-  }, []);
+  }, [isPlaying, activeTrack, playbackSource]);
+
+  const handlePauseTrack = useCallback(() => {
+    if (playbackSource === 'stream') {
+      ytBridgeRef.current?.pause();
+    } else if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlaying(false);
+  }, [playbackSource]);
+
+  const handleSeek = useCallback(
+    (timeSec: number) => {
+      setCurrentTime(timeSec);
+      if (playbackSource === 'stream') {
+        ytBridgeRef.current?.seekTo(timeSec);
+      } else if (audioRef.current) {
+        audioRef.current.currentTime = timeSec;
+      }
+    },
+    [playbackSource]
+  );
 
   const handleVolumeChange = useCallback(
     (newVolume: number) => {
@@ -236,6 +399,7 @@ export default function App() {
       if (audioRef.current) {
         audioRef.current.volume = clamped;
       }
+      ytBridgeRef.current?.setVolume(clamped);
       if (clamped > 0 && isMuted) {
         setIsMuted(false);
         if (audioRef.current) {
@@ -252,35 +416,94 @@ export default function App() {
       if (audioRef.current) {
         audioRef.current.muted = next;
       }
+      ytBridgeRef.current?.setVolume(next ? 0 : volume);
       return next;
     });
-  }, []);
+  }, [volume]);
+
+  // YouTube Audio Bridge Event Handlers
+  const handleYtStateChange = useCallback(
+    (state: YTPlaybackState) => {
+      if (playbackSource === 'stream') {
+        if (state === 'playing') {
+          setIsPlaying(true);
+        } else if (state === 'paused') {
+          setIsPlaying(false);
+        } else if (state === 'ended') {
+          if (hasNext) {
+            handleNext();
+          } else {
+            setIsPlaying(false);
+          }
+        }
+      }
+    },
+    [playbackSource, hasNext, handleNext]
+  );
+
+  const handleYtTimeUpdate = useCallback(
+    (time: number, dur: number) => {
+      if (playbackSource === 'stream') {
+        setCurrentTime(time);
+        if (dur > 0) {
+          setDuration(dur);
+        }
+      }
+    },
+    [playbackSource]
+  );
+
+  const handleYtError = useCallback(
+    (errorCode: number) => {
+      console.warn('[YouTubeAudioBridge] Error code:', errorCode);
+      if (playbackSource === 'stream') {
+        // Fallback to HTML5 audio preview if available
+        const previewUrl = activeTrack ? getTrackAudioUrl(activeTrack) : '';
+        if (previewUrl && audioRef.current) {
+          setPlaybackSource('preview');
+          audioRef.current.src = previewUrl;
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch((err) => {
+            console.warn('[Audio Engine] Fallback preview error:', err);
+            setIsPlaying(false);
+          });
+        } else {
+          setIsPlaying(false);
+        }
+      }
+    },
+    [playbackSource, activeTrack]
+  );
 
   // Audio Element Event Handlers
   const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
+    if (playbackSource !== 'stream' && audioRef.current) {
       setCurrentTime(audioRef.current.currentTime || 0);
     }
-  }, []);
+  }, [playbackSource]);
 
   const handleLoadedMetadata = useCallback(() => {
-    if (audioRef.current) {
+    if (playbackSource !== 'stream' && audioRef.current) {
       setDuration(audioRef.current.duration || 0);
     }
-  }, []);
+  }, [playbackSource]);
 
   const handleAudioEnded = useCallback(() => {
-    if (hasNext) {
-      handleNext();
-    } else {
-      setIsPlaying(false);
+    if (playbackSource !== 'stream') {
+      if (hasNext) {
+        handleNext();
+      } else {
+        setIsPlaying(false);
+      }
     }
-  }, [hasNext, handleNext]);
+  }, [playbackSource, hasNext, handleNext]);
 
   const handleAudioError = useCallback(() => {
-    console.warn('[Audio Engine] Playback error encountered gracefully.');
-    setIsPlaying(false);
-  }, []);
+    if (playbackSource !== 'stream') {
+      console.warn('[Audio Engine] HTML5 Playback error encountered gracefully.');
+      setIsPlaying(false);
+    }
+  }, [playbackSource]);
 
   // Offline Track Download Handler
   const handleDownloadTrack = useCallback(
@@ -516,14 +739,30 @@ export default function App() {
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleAudioEnded}
         onError={handleAudioError}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        onPlay={() => {
+          if (playbackSource !== 'stream') {
+            setIsPlaying(true);
+          }
+        }}
+        onPause={() => {
+          if (playbackSource !== 'stream') {
+            setIsPlaying(false);
+          }
+        }}
+      />
+
+      {/* Hidden YouTube Audio Bridge Engine */}
+      <YouTubeAudioBridge
+        ref={ytBridgeRef}
+        onStateChange={handleYtStateChange}
+        onTimeUpdate={handleYtTimeUpdate}
+        onError={handleYtError}
       />
 
       {/* Sticky Top Header */}
       <MobileTopHeader
         title="Yoinks Music"
-        format="MP3 320k"
+        playbackSource={playbackSource}
         onOpenSettings={() => {
           setActiveTab('settings');
           setCurrentView('settings');
@@ -644,9 +883,90 @@ export default function App() {
                 Settings & Preferences
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                Audio fidelity, offline cache metrics, and app principles.
+                Audio fidelity, streaming preferences, offline cache metrics, and app principles.
               </p>
             </div>
+
+            {/* Audio Streaming Mode Card */}
+            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-100/80">
+                  <Radio className="w-4 h-4" aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                    Audio Streaming Mode
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Choose between full songs or quick 30s previews
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5 mt-1">
+                {/* Full-Length Audio (Stream Resolver) */}
+                <button
+                  type="button"
+                  onClick={() => handleSetStreamPreference('full')}
+                  className={`min-h-[52px] p-3.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    streamPreference === 'full'
+                      ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
+                      : 'bg-slate-50 border-slate-200/60 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  aria-pressed={streamPreference === 'full'}
+                >
+                  <div className="flex flex-col pr-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      Full-Length Audio (Stream Resolver)
+                    </span>
+                    <span className="text-xs text-slate-600 font-medium mt-0.5">
+                      Stream complete tracks with instant 0ms preview feedback
+                    </span>
+                  </div>
+                  {streamPreference === 'full' ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Active</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-400 shrink-0 px-2 py-1">
+                      Select
+                    </span>
+                  )}
+                </button>
+
+                {/* Quick 30s Previews */}
+                <button
+                  type="button"
+                  onClick={() => handleSetStreamPreference('preview')}
+                  className={`min-h-[52px] p-3.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    streamPreference === 'preview'
+                      ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
+                      : 'bg-slate-50 border-slate-200/60 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  aria-pressed={streamPreference === 'preview'}
+                >
+                  <div className="flex flex-col pr-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      Quick 30s Previews
+                    </span>
+                    <span className="text-xs text-slate-600 font-medium mt-0.5">
+                      Lightweight 30s preview clips with minimal data usage
+                    </span>
+                  </div>
+                  {streamPreference === 'preview' ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Active</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-400 shrink-0 px-2 py-1">
+                      Select
+                    </span>
+                  )}
+                </button>
+              </div>
+            </section>
 
             {/* Audio Quality Card */}
             <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
@@ -784,6 +1104,7 @@ export default function App() {
             <MobileDockedPlayer
               track={activeTrack}
               isPlaying={isPlaying}
+              playbackSource={playbackSource}
               onPlayPause={handlePlayPause}
               onNext={hasNext ? handleNext : undefined}
               onExpand={() => setIsPlayerSheetOpen(true)}
@@ -801,6 +1122,7 @@ export default function App() {
         duration={duration}
         volume={volume}
         isMuted={isMuted}
+        playbackSource={playbackSource}
         onPlayPause={handlePlayPause}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}

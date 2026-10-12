@@ -1,17 +1,52 @@
 import React from 'react';
 import { Disc3, Settings } from 'lucide-react';
+import type { PlaybackSource } from '../types';
 
 export interface MobileTopHeaderProps {
   title?: string;
   format?: string;
+  playbackSource?: PlaybackSource;
   onOpenSettings?: () => void;
 }
 
 export const MobileTopHeader: React.FC<MobileTopHeaderProps> = React.memo(({
   title = 'Yoinks Music',
-  format = 'MP3',
+  format = 'MP3 320k',
+  playbackSource,
   onOpenSettings,
 }) => {
+  const renderPill = () => {
+    if (playbackSource === 'stream') {
+      return (
+        <span
+          className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 select-none shadow-xs"
+          aria-label="Audio format: Full Audio Stream"
+        >
+          FULL AUDIO
+        </span>
+      );
+    }
+    if (playbackSource === 'preview') {
+      return (
+        <span
+          className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-amber-50 text-amber-700 border border-amber-200/80 select-none shadow-xs"
+          aria-label="Audio format: 30s Preview"
+        >
+          30s PREVIEW
+        </span>
+      );
+    }
+    const label = format || 'MP3 320k';
+    return (
+      <span
+        className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700 border border-slate-200/80 select-none shadow-xs"
+        aria-label={`Audio format: ${label}`}
+      >
+        {label}
+      </span>
+    );
+  };
+
   return (
     <header className="sticky top-0 z-30 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 pt-safe-top select-none">
       <div className="w-full px-4 h-14 sm:h-16 flex items-center justify-between">
@@ -27,14 +62,7 @@ export const MobileTopHeader: React.FC<MobileTopHeaderProps> = React.memo(({
 
         {/* Right: Audio format pill & optional settings gear button */}
         <div className="flex items-center gap-2">
-          {format && (
-            <span
-              className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700 border border-slate-200/80 select-none shadow-xs"
-              aria-label={`Audio format: ${format}`}
-            >
-              {format}
-            </span>
-          )}
+          {renderPill()}
 
           {onOpenSettings && (
             <button
