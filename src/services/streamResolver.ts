@@ -3,14 +3,35 @@ import { Preferences } from '@capacitor/preferences';
 import type { ResolvedStream } from '../types';
 
 const REQUEST_TIMEOUT_MS = 6000;
-const HTTP_HEADERS: Record<string, string> = {
+const MAX_MEMORY_CACHE_SIZE = 300;
+
+const NATIVE_HTTP_HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
-// In-memory cache for O(1) resolution
+const BROWSER_HTTP_HEADERS: Record<string, string> = {
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+// In-memory bounded cache for O(1) resolution
 const memoryCache = new Map<string, string>();
+
+/**
+ * Sets a key-value pair in memoryCache with bounded size eviction (FIFO/LRU).
+ */
+function setMemoryCache(key: string, value: string): void {
+  if (memoryCache.has(key)) {
+    memoryCache.delete(key);
+  } else if (memoryCache.size >= MAX_MEMORY_CACHE_SIZE) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      memoryCache.delete(oldestKey);
+    }
+  }
+  memoryCache.set(key, value);
+}
 
 /**
  * Normalizes artist/title string for preference cache key format.
@@ -32,20 +53,22 @@ function normalizeKeyPart(str: string): string {
 }
 
 /**
- * Generates persistent cache key: stream_${normalizedArtist}_${normalizedTitle}
+ * Generates persistent cache key: stream_${normalizedTitle}::${normalizedArtist}
  */
-function getCacheKey(artist: string, title: string): string {
-  const normalizedArtist = normalizeKeyPart(artist);
-  const normalizedTitle = normalizeKeyPart(title);
-  return `stream_${normalizedArtist}_${normalizedTitle}`;
+function getCacheKey(title: string, artist: string): string {
+  const normalizedTitle = normalizeKeyPart(title?.trim() || '');
+  const normalizedArtist = normalizeKeyPart(artist?.trim() || '');
+  return `stream_${normalizedTitle}::${normalizedArtist}`;
 }
 
 /**
  * Checks in-memory cache and Preferences cache for a previously resolved video ID.
  */
 export async function getCachedStream(title: string, artist: string): Promise<string | null> {
-  if (!title || !artist) return null;
-  const key = getCacheKey(artist, title);
+  if (!title || !artist || !title.trim() || !artist.trim()) return null;
+  const trimmedTitle = title.trim();
+  const trimmedArtist = artist.trim();
+  const key = getCacheKey(trimmedTitle, trimmedArtist);
 
   // 1. In-memory check: O(1)
   const memValue = memoryCache.get(key);
@@ -57,7 +80,7 @@ export async function getCachedStream(title: string, artist: string): Promise<st
   try {
     const { value } = await Preferences.get({ key });
     if (value) {
-      memoryCache.set(key, value);
+      setMemoryCache(key, value);
       return value;
     }
   } catch (err) {
@@ -71,13 +94,16 @@ export async function getCachedStream(title: string, artist: string): Promise<st
  * Persists resolved video ID to in-memory cache and Preferences.
  */
 export async function cacheStream(title: string, artist: string, videoId: string): Promise<void> {
-  if (!title || !artist || !videoId) return;
-  const key = getCacheKey(artist, title);
+  if (!title || !artist || !videoId || !title.trim() || !artist.trim() || !videoId.trim()) return;
+  const trimmedTitle = title.trim();
+  const trimmedArtist = artist.trim();
+  const trimmedVideoId = videoId.trim();
+  const key = getCacheKey(trimmedTitle, trimmedArtist);
 
-  memoryCache.set(key, videoId);
+  setMemoryCache(key, trimmedVideoId);
 
   try {
-    await Preferences.set({ key, value: videoId });
+    await Preferences.set({ key, value: trimmedVideoId });
   } catch (err) {
     // Non-fatal
   }
@@ -91,11 +117,8 @@ export async function clearStreamCache(): Promise<void> {
 
   try {
     const { keys } = await Preferences.keys();
-    for (const key of keys) {
-      if (key.startsWith('stream_')) {
-        await Preferences.remove({ key });
-      }
-    }
+    const streamKeys = keys.filter((key) => key.startsWith('stream_'));
+    await Promise.all(streamKeys.map((key) => Preferences.remove({ key })));
   } catch (err) {
     // Non-fatal
   }
@@ -122,12 +145,16 @@ async function fetchYouTubeHtml(url: string, signal?: AbortSignal): Promise<stri
     if (Capacitor.isNativePlatform()) {
       const nativePromise = CapacitorHttp.get({
         url,
-        headers: HTTP_HEADERS,
+        headers: NATIVE_HTTP_HEADERS,
         connectTimeout: REQUEST_TIMEOUT_MS,
         readTimeout: REQUEST_TIMEOUT_MS,
       });
 
       const abortPromise = new Promise<never>((_, reject) => {
+        if (controller.signal.aborted) {
+          reject(new Error('Aborted'));
+          return;
+        }
         controller.signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
       });
 
@@ -138,7 +165,7 @@ async function fetchYouTubeHtml(url: string, signal?: AbortSignal): Promise<stri
       return null;
     } else {
       const res = await fetch(url, {
-        headers: HTTP_HEADERS,
+        headers: BROWSER_HTTP_HEADERS,
         signal: controller.signal,
       });
 
