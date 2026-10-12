@@ -30,6 +30,7 @@ export interface DeezerTrack {
     coverMedium: string;
     coverBig: string;
   };
+  resolvedVideoId?: string;
 }
 
 export interface DeezerAlbum {
@@ -54,6 +55,7 @@ export interface RecentTrack {
   format?: string;
   downloadedAt: number;
   url?: string;
+  resolvedVideoId?: string;
 }
 
 export interface SearchResult {
@@ -66,3 +68,14 @@ export interface SearchResult {
   url: string;
   format?: FormatKind;
 }
+
+export interface ResolvedStream {
+  videoId: string;
+  source: 'youtube';
+  title?: string;
+  artist?: string;
+  duration?: number;
+}
+
+export type PlaybackSource = 'stream' | 'preview' | 'offline';
+
