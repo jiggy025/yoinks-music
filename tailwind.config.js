@@ -9,6 +9,9 @@ export default {
       colors: {
         canvas: '#f8fafc',
       },
+      boxShadow: {
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+      },
       padding: {
         'safe-top': 'env(safe-area-inset-top)',
         'safe-bottom': 'env(safe-area-inset-bottom)',
