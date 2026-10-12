@@ -78,6 +78,10 @@ export default function App() {
 
   // Audio Engine State
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const searchReqIdRef = useRef(0);
+  const artistReqIdRef = useRef(0);
+  const albumReqIdRef = useRef(0);
+
   const [activeTrack, setActiveTrack] = useState<AnyPlayableTrack | null>(null);
   const [activeQueue, setActiveQueue] = useState<AnyPlayableTrack[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -150,6 +154,12 @@ export default function App() {
       const audio = audioRef.current;
       if (audio) {
         const streamUrl = getTrackAudioUrl(track);
+        if (!streamUrl) {
+          console.warn('[Audio Engine] No playable audio stream available for track:', track);
+          setIsPlaying(false);
+          return;
+        }
+
         if (audio.src !== streamUrl) {
           audio.src = streamUrl;
           audio.currentTime = 0;
@@ -345,6 +355,11 @@ export default function App() {
   }, []);
 
   const handleClearLibrary = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to remove all saved songs from your offline library? This action cannot be undone.'
+    );
+    if (!confirmed) return;
+
     try {
       await clearStoredTracks();
       setRecentTracks([]);
@@ -387,28 +402,36 @@ export default function App() {
     const trimmed = q.trim();
     if (!trimmed) return;
 
+    const reqId = ++searchReqIdRef.current;
     setIsSearching(true);
     try {
       const artists = await searchDeezerArtist(trimmed);
-      if (artists && artists.length > 0) {
-        const candidate = artists.find((a) => a.nbAlbum > 0) || artists[0];
-        setMatchedArtist(candidate);
-      } else {
-        setMatchedArtist(null);
+      if (reqId === searchReqIdRef.current) {
+        if (artists && artists.length > 0) {
+          const candidate = artists.find((a) => a.nbAlbum > 0) || artists[0];
+          setMatchedArtist(candidate);
+        } else {
+          setMatchedArtist(null);
+        }
       }
     } catch (err) {
       console.error('[Deezer API] Search error:', err);
-      setMatchedArtist(null);
+      if (reqId === searchReqIdRef.current) {
+        setMatchedArtist(null);
+      }
     } finally {
-      setIsSearching(false);
-      setSelectedAlbum(null);
-      setSelectedArtist(null);
-      setCurrentView('search');
-      setActiveTab('search');
+      if (reqId === searchReqIdRef.current) {
+        setIsSearching(false);
+        setSelectedAlbum(null);
+        setSelectedArtist(null);
+        setCurrentView('search');
+        setActiveTab('search');
+      }
     }
   }, []);
 
   const handleViewArtist = useCallback(async (artist: DeezerArtist) => {
+    const reqId = ++artistReqIdRef.current;
     setSelectedArtist(artist);
     setSelectedAlbum(null);
     setCurrentView('artist');
@@ -423,17 +446,22 @@ export default function App() {
         getArtistTopTracks(artist.id),
         getArtistAlbums(artist.id),
       ]);
-      setArtistTopTracks(tracks);
-      setArtistAlbums(albums);
+      if (reqId === artistReqIdRef.current) {
+        setArtistTopTracks(tracks);
+        setArtistAlbums(albums);
+      }
     } catch (err) {
       console.error('[Deezer API] Artist detail fetch error:', err);
     } finally {
-      setIsLoadingArtistTracks(false);
-      setIsLoadingArtistAlbums(false);
+      if (reqId === artistReqIdRef.current) {
+        setIsLoadingArtistTracks(false);
+        setIsLoadingArtistAlbums(false);
+      }
     }
   }, []);
 
   const handleSelectAlbum = useCallback(async (album: DeezerAlbum) => {
+    const reqId = ++albumReqIdRef.current;
     setSelectedAlbum(album);
     setCurrentView('album');
     setActiveTab('search');
@@ -442,11 +470,15 @@ export default function App() {
     setIsLoadingAlbumTracks(true);
     try {
       const tracks = await getAlbumTracks(album.id);
-      setAlbumTracks(tracks);
+      if (reqId === albumReqIdRef.current) {
+        setAlbumTracks(tracks);
+      }
     } catch (err) {
       console.error('[Deezer API] Album tracks fetch error:', err);
     } finally {
-      setIsLoadingAlbumTracks(false);
+      if (reqId === albumReqIdRef.current) {
+        setIsLoadingAlbumTracks(false);
+      }
     }
   }, []);
 
