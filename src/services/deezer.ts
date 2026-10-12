@@ -1,3 +1,4 @@
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import type { DeezerArtist, DeezerTrack, DeezerAlbum } from '../types';
 import { formatDuration } from '../utils/formatters';
 
@@ -14,6 +15,49 @@ function createSignal(callerSignal?: AbortSignal): AbortSignal {
 }
 
 /**
+ * Universal JSON fetcher: Uses native CapacitorHttp on Android/iOS to bypass CORS,
+ * and falls back to standard fetch in web browsers.
+ */
+async function fetchDeezerJson(url: string, callerSignal?: AbortSignal): Promise<any> {
+  // 1. Native Mobile Path (Android / iOS): Zero CORS restriction
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const response = await CapacitorHttp.get({
+        url,
+        connectTimeout: REQUEST_TIMEOUT_MS,
+        readTimeout: REQUEST_TIMEOUT_MS,
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        if (typeof response.data === 'string') {
+          return JSON.parse(response.data);
+        }
+        return response.data;
+      }
+      console.warn(`[Deezer API] Native HTTP ${response.status} for ${url}`);
+      return null;
+    } catch (nativeErr) {
+      console.error(`[Deezer API] Native CapacitorHttp error for ${url}:`, nativeErr);
+      return null;
+    }
+  }
+
+  // 2. Web Browser Fallback
+  try {
+    const res = await fetch(url, { signal: createSignal(callerSignal) });
+    if (!res.ok) {
+      console.warn(`[Deezer API] Browser fetch HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
+    return await res.json();
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return null;
+    console.error(`[Deezer API] Browser fetch error for ${url}:`, err);
+    return null;
+  }
+}
+
+/**
  * Searches for artists matching query using Deezer public search API.
  * Returns empty array on rate limits, negative/empty query, or network errors.
  */
@@ -25,12 +69,8 @@ export async function searchDeezerArtist(query: string, callerSignal?: AbortSign
 
   try {
     const url = `${DEEZER_BASE_URL}/search/artist?q=${encodeURIComponent(trimmed)}&limit=10`;
-    const res = await fetch(url, { signal: createSignal(callerSignal) });
-    if (!res.ok) {
-      console.warn(`[Deezer API] searchDeezerArtist HTTP ${res.status}: ${res.statusText}`);
-      return [];
-    }
-    const json = await res.json();
+    const json = await fetchDeezerJson(url, callerSignal);
+
     if (json?.error) {
       console.warn(`[Deezer API] Error ${json.error.code}: ${json.error.message}`);
       return [];
@@ -52,9 +92,6 @@ export async function searchDeezerArtist(query: string, callerSignal?: AbortSign
       tracklist: item.tracklist || '',
     }));
   } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      return [];
-    }
     console.error('[Deezer API] searchDeezerArtist error:', error);
     return [];
   }
@@ -71,12 +108,8 @@ export async function getArtistTopTracks(artistId: number, callerSignal?: AbortS
 
   try {
     const url = `${DEEZER_BASE_URL}/artist/${artistId}/top?limit=25`;
-    const res = await fetch(url, { signal: createSignal(callerSignal) });
-    if (!res.ok) {
-      console.warn(`[Deezer API] getArtistTopTracks HTTP ${res.status}: ${res.statusText}`);
-      return [];
-    }
-    const json = await res.json();
+    const json = await fetchDeezerJson(url, callerSignal);
+
     if (json?.error) {
       console.warn(`[Deezer API] Error ${json.error.code}: ${json.error.message}`);
       return [];
@@ -107,9 +140,6 @@ export async function getArtistTopTracks(artistId: number, callerSignal?: AbortS
       };
     });
   } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      return [];
-    }
     console.error('[Deezer API] getArtistTopTracks error:', error);
     return [];
   }
@@ -126,12 +156,8 @@ export async function getArtistAlbums(artistId: number, callerSignal?: AbortSign
 
   try {
     const url = `${DEEZER_BASE_URL}/artist/${artistId}/albums?limit=50`;
-    const res = await fetch(url, { signal: createSignal(callerSignal) });
-    if (!res.ok) {
-      console.warn(`[Deezer API] getArtistAlbums HTTP ${res.status}: ${res.statusText}`);
-      return [];
-    }
-    const json = await res.json();
+    const json = await fetchDeezerJson(url, callerSignal);
+
     if (json?.error) {
       console.warn(`[Deezer API] Error ${json.error.code}: ${json.error.message}`);
       return [];
@@ -156,9 +182,6 @@ export async function getArtistAlbums(artistId: number, callerSignal?: AbortSign
       };
     });
   } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      return [];
-    }
     console.error('[Deezer API] getArtistAlbums error:', error);
     return [];
   }
@@ -175,12 +198,8 @@ export async function getAlbumTracks(albumId: number, callerSignal?: AbortSignal
 
   try {
     const url = `${DEEZER_BASE_URL}/album/${albumId}/tracks?limit=50`;
-    const res = await fetch(url, { signal: createSignal(callerSignal) });
-    if (!res.ok) {
-      console.warn(`[Deezer API] getAlbumTracks HTTP ${res.status}: ${res.statusText}`);
-      return [];
-    }
-    const json = await res.json();
+    const json = await fetchDeezerJson(url, callerSignal);
+
     if (json?.error) {
       console.warn(`[Deezer API] Error ${json.error.code}: ${json.error.message}`);
       return [];
@@ -215,9 +234,6 @@ export async function getAlbumTracks(albumId: number, callerSignal?: AbortSignal
       };
     });
   } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      return [];
-    }
     console.error('[Deezer API] getAlbumTracks error:', error);
     return [];
   }
