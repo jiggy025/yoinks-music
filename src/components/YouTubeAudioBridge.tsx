@@ -135,12 +135,41 @@ function loadYouTubeIframeApi(callback: ApiCallback): () => void {
       const tag = document.createElement('script');
       tag.src = YT_API_SCRIPT_SRC;
       tag.async = true;
+      tag.onerror = (err) => {
+        console.error('[YouTubeAudioBridge] Failed to load YouTube IFrame API script:', err);
+        isScriptLoadingOrLoaded = false;
+        while (apiReadyCallbacks.length > 0) {
+          const nextCb = apiReadyCallbacks.shift();
+          try {
+            nextCb?.();
+          } catch (cbErr) {
+            console.error('[YouTubeAudioBridge] Error in API ready callback on script error:', cbErr);
+          }
+        }
+      };
       const firstScript = document.getElementsByTagName('script')[0];
       if (firstScript && firstScript.parentNode) {
         firstScript.parentNode.insertBefore(tag, firstScript);
       } else {
         (document.head || document.body).appendChild(tag);
       }
+    } else {
+      existingScript.addEventListener(
+        'error',
+        (err) => {
+          console.error('[YouTubeAudioBridge] Failed to load existing YouTube IFrame API script:', err);
+          isScriptLoadingOrLoaded = false;
+          while (apiReadyCallbacks.length > 0) {
+            const nextCb = apiReadyCallbacks.shift();
+            try {
+              nextCb?.();
+            } catch (cbErr) {
+              console.error('[YouTubeAudioBridge] Error in API ready callback on script error:', cbErr);
+            }
+          }
+        },
+        { once: true }
+      );
     }
   }
 
@@ -181,6 +210,7 @@ export const YouTubeAudioBridge = React.forwardRef<
   const progressTimerRef = useRef<number | null>(null);
   const pendingVideoIdRef = useRef<string | null>(null);
   const pendingVolumeRef = useRef<number | null>(null);
+  const pendingSeekTimeRef = useRef<number | null>(null);
 
   // Keep callback refs fresh
   const onReadyRef = useRef(onReady);
@@ -274,6 +304,8 @@ export const YouTubeAudioBridge = React.forwardRef<
           } catch (err) {
             console.error('[YouTubeAudioBridge] Error calling seekTo:', err);
           }
+        } else {
+          pendingSeekTimeRef.current = safeSeconds;
         }
       },
       setVolume: (volume: number) => {
@@ -319,18 +351,10 @@ export const YouTubeAudioBridge = React.forwardRef<
     let isMounted = true;
 
     const initPlayer = () => {
-      if (!isMounted || !window.YT || !window.YT.Player) return;
-
-      // Ensure host element exists inside container
-      const existingHost = document.getElementById('yt-audio-player-host');
-      if (!existingHost && containerRef.current) {
-        const hostDiv = document.createElement('div');
-        hostDiv.id = 'yt-audio-player-host';
-        containerRef.current.appendChild(hostDiv);
-      }
+      if (!isMounted || !window.YT || !window.YT.Player || !containerRef.current) return;
 
       try {
-        playerRef.current = new window.YT.Player('yt-audio-player-host', {
+        playerRef.current = new window.YT.Player(containerRef.current, {
           height: '1',
           width: '1',
           playerVars: {
@@ -342,12 +366,15 @@ export const YouTubeAudioBridge = React.forwardRef<
             autoplay: 1,
           },
           events: {
-            onReady: () => {
+            onReady: (event: { target: YTPlayer }) => {
               if (!isMounted) {
                 try {
-                  playerRef.current?.destroy();
+                  event.target?.destroy();
                 } catch {}
                 return;
+              }
+              if (!playerRef.current) {
+                playerRef.current = event.target;
               }
               isReadyRef.current = true;
               if (pendingVolumeRef.current !== null) {
@@ -364,6 +391,15 @@ export const YouTubeAudioBridge = React.forwardRef<
                   playerRef.current?.loadVideoById(vid);
                 } catch (err) {
                   console.error('[YouTubeAudioBridge] Error playing pending video:', err);
+                }
+              }
+              if (pendingSeekTimeRef.current !== null) {
+                const seekTime = pendingSeekTimeRef.current;
+                pendingSeekTimeRef.current = null;
+                try {
+                  playerRef.current?.seekTo(seekTime, true);
+                } catch (err) {
+                  console.error('[YouTubeAudioBridge] Error applying pending seek time:', err);
                 }
               }
               onReadyRef.current?.();
@@ -406,16 +442,18 @@ export const YouTubeAudioBridge = React.forwardRef<
         playerRef.current = null;
       }
       isReadyRef.current = false;
+      pendingVideoIdRef.current = null;
+      pendingSeekTimeRef.current = null;
+      pendingVolumeRef.current = null;
     };
   }, []);
 
   return (
     <div
-      ref={containerRef}
       className="fixed -left-[9999px] -top-[9999px] w-px h-px opacity-0 pointer-events-none overflow-hidden"
       aria-hidden="true"
     >
-      <div id="yt-audio-player-host" />
+      <div ref={containerRef} />
     </div>
   );
 });
