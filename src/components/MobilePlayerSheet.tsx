@@ -13,7 +13,7 @@ import {
   Repeat,
   Volume2,
   VolumeX,
-  Sparkles,
+  Radio,
 } from 'lucide-react';
 import { AnyPlayableTrack, extractTrackMeta } from './MobileDockedPlayer';
 import { formatDuration } from '../utils/formatters';
@@ -28,6 +28,7 @@ export interface MobilePlayerSheetProps {
   volume: number;
   isMuted?: boolean;
   playbackSource?: PlaybackSource;
+  isResolvingStream?: boolean;
   onPlayPause: () => void;
   onSeek: (timeSec: number) => void;
   onVolumeChange: (volume: number) => void;
@@ -44,9 +45,10 @@ interface SheetArtworkProps {
   cover?: string;
   title: string;
   isPlaying: boolean;
+  isResolving?: boolean;
 }
 
-const SheetArtwork = React.memo<SheetArtworkProps>(({ cover, title, isPlaying }) => {
+const SheetArtwork = React.memo<SheetArtworkProps>(({ cover, title, isPlaying, isResolving }) => {
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
@@ -54,11 +56,11 @@ const SheetArtwork = React.memo<SheetArtworkProps>(({ cover, title, isPlaying })
   }, [cover]);
 
   return (
-    <div className="aspect-square w-56 sm:w-64 mx-auto rounded-3xl object-cover bg-slate-100 border border-slate-200/80 shadow-xl overflow-hidden flex items-center justify-center relative">
+    <div className="relative aspect-square w-64 sm:w-72 mx-auto rounded-3xl overflow-hidden bg-zinc-900 border border-white/10 shadow-2xl shadow-black/90 flex items-center justify-center">
       {!cover || hasError ? (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-6">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 text-zinc-500 p-6">
           <Disc3
-            className={`w-24 h-24 text-slate-400 ${isPlaying ? 'animate-spin' : ''}`}
+            className={`w-24 h-24 text-zinc-600 ${isPlaying && !isResolving ? 'animate-spin' : ''}`}
             style={{ animationDuration: '6s' }}
             aria-hidden="true"
           />
@@ -70,6 +72,15 @@ const SheetArtwork = React.memo<SheetArtworkProps>(({ cover, title, isPlaying })
           onError={() => setHasError(true)}
           className="w-full h-full object-cover select-none"
         />
+      )}
+
+      {isResolving && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+          <Loader2 className="w-8 h-8 text-zinc-200 animate-spin" />
+          <span className="text-xs text-zinc-300 font-mono tracking-wider uppercase">
+            Buffering Full Audio
+          </span>
+        </div>
       )}
     </div>
   );
@@ -86,6 +97,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   volume,
   isMuted = false,
   playbackSource,
+  isResolvingStream = false,
   onPlayPause,
   onSeek,
   onVolumeChange,
@@ -100,27 +112,19 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
 
-  // Close on Escape key press
   useEffect(() => {
     if (!isOpen || !track) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, track, onClose]);
 
-  // Lock body scroll when sheet is open
   useEffect(() => {
     if (!isOpen || !track) return;
-
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-
     return () => {
       document.body.style.overflow = prevOverflow;
     };
@@ -159,7 +163,6 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
     if (onToggleMute) {
       onToggleMute();
     } else {
-      // Fallback toggling volume if no onToggleMute handler provided
       onVolumeChange(volume > 0 ? 0 : 0.8);
     }
   }, [onToggleMute, onVolumeChange, volume]);
@@ -170,7 +173,6 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
 
   const { title, artist, cover } = extractTrackMeta(track);
 
-  // Safe numerical guards for scrubber
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const safeCurrentTime = Number.isFinite(currentTime) && currentTime >= 0 ? currentTime : 0;
   const clampedCurrentTime = safeDuration > 0 ? Math.min(safeCurrentTime, safeDuration) : 0;
@@ -183,65 +185,65 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
       aria-label="Now Playing Audio Player"
       data-testid="mobile-player-sheet-overlay"
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex flex-col justify-end transition-opacity select-none"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex flex-col justify-end select-none"
     >
       <div
         data-testid="mobile-player-sheet"
-        className="w-full max-h-[92vh] h-full bg-white rounded-t-3xl border-t border-slate-200/80 shadow-2xl flex flex-col justify-between p-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] overflow-y-auto"
+        className="relative w-full max-h-[94vh] h-full bg-zinc-950/95 rounded-t-[32px] border-t border-white/10 shadow-2xl flex flex-col justify-between p-6 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] overflow-hidden"
       >
-        {/* Top Section: Drag Handle & Header Row */}
-        <div>
-          {/* Drag Handle Bar */}
-          <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-2" />
+        {/* Ambient Artwork Glow Backdrop */}
+        {cover && (
+          <div
+            className="absolute inset-0 pointer-events-none opacity-20 filter blur-3xl scale-125"
+            style={{
+              backgroundImage: `url(${cover})`,
+              backgroundPosition: 'center',
+              backgroundSize: 'cover',
+            }}
+            aria-hidden="true"
+          />
+        )}
 
-          {/* Header Row */}
-          <div className="flex items-center justify-between mb-3">
-            {/* Left: Dismiss Button */}
+        {/* Top Header Row */}
+        <div className="relative z-10 w-full">
+          {/* Pull Handle */}
+          <div className="w-10 h-1 bg-zinc-700/80 rounded-full mx-auto mb-3" />
+
+          <div className="flex items-center justify-between mb-2">
             <button
               type="button"
               onClick={onClose}
               aria-label="Close now playing player"
-              className="min-h-[48px] min-w-[48px] flex items-center justify-center text-slate-600 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-zinc-100 rounded-xl hover:bg-white/5 active:scale-95 transition-transform duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
-              <ChevronDown className="w-6 h-6" />
+              <ChevronDown className="w-5 h-5" />
             </button>
 
-            {/* Center: Badge */}
-            {playbackSource === 'stream' ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-200/80">
-                <Sparkles
-                  className={`w-3.5 h-3.5 text-emerald-600 ${isPlaying ? 'animate-pulse' : ''}`}
-                  aria-hidden="true"
-                />
-                <span className="text-[11px] font-bold tracking-wider text-emerald-700 uppercase">
-                  FULL AUDIO
+            {/* Status Pill */}
+            {isResolvingStream ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 rounded-full border border-amber-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-[11px] font-mono text-amber-300 uppercase tracking-wider">
+                  Loading Stream
                 </span>
               </div>
-            ) : playbackSource === 'preview' ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 rounded-full border border-amber-200/80">
-                <Disc3
-                  className={`w-3.5 h-3.5 text-amber-600 ${isPlaying ? 'animate-spin' : ''}`}
-                  style={{ animationDuration: '4s' }}
-                  aria-hidden="true"
-                />
-                <span className="text-[11px] font-bold tracking-wider text-amber-700 uppercase">
-                  30s PREVIEW
+            ) : playbackSource === 'stream' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[11px] font-mono text-emerald-300 uppercase tracking-wider">
+                  Full Audio Stream
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full border border-slate-200/70">
-                <Disc3
-                  className={`w-3.5 h-3.5 text-blue-600 ${isPlaying ? 'animate-spin' : ''}`}
-                  style={{ animationDuration: '4s' }}
-                  aria-hidden="true"
-                />
-                <span className="text-[11px] font-bold tracking-wider text-slate-700 uppercase">
-                  {playbackSource === 'offline' ? 'OFFLINE' : 'NOW PLAYING'}
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-900 rounded-full border border-white/10">
+                <Radio className="w-3 h-3 text-zinc-400" />
+                <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+                  {playbackSource === 'offline' ? 'Offline' : 'Now Playing'}
                 </span>
               </div>
             )}
 
-            {/* Right: Download or Placeholder */}
+            {/* Download Action */}
             {onDownload ? (
               <button
                 type="button"
@@ -254,153 +256,146 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
                     ? 'Downloading track'
                     : 'Download track'
                 }
-                className="min-h-[48px] min-w-[48px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed cursor-pointer"
+                className="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-zinc-100 rounded-xl hover:bg-white/5 active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 cursor-pointer disabled:opacity-40"
               >
                 {isDownloading ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-200" />
                 ) : isDownloaded ? (
-                  <Check className="w-5 h-5 text-emerald-600" />
+                  <Check className="w-4 h-4 text-emerald-400" />
                 ) : (
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4" />
                 )}
               </button>
             ) : (
-              <div className="min-h-[48px] min-w-[48px]" aria-hidden="true" />
+              <div className="w-10 h-10" aria-hidden="true" />
             )}
           </div>
         </div>
 
-        {/* Center Section: Vinyl Sleeve Artwork & Titles */}
-        <div className="my-auto py-2 flex flex-col items-center">
-          <SheetArtwork cover={cover} title={title} isPlaying={isPlaying} />
+        {/* Center Artwork & Track Titles */}
+        <div className="relative z-10 my-auto py-3 flex flex-col items-center">
+          <SheetArtwork cover={cover} title={title} isPlaying={isPlaying} isResolving={isResolvingStream} />
 
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 text-center tracking-tight line-clamp-2 px-4 mt-4 leading-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 text-center tracking-tight line-clamp-2 px-6 mt-6 leading-snug">
             {title}
           </h2>
 
-          <p className="text-base font-semibold text-slate-600 text-center mt-1 truncate px-4 max-w-sm">
+          <p className="text-sm font-medium text-zinc-400 text-center mt-1.5 truncate px-6 max-w-sm">
             {artist}
           </p>
         </div>
 
-        {/* Bottom Section: Progress Scrubber, Playback Controls, and Volume */}
-        <div className="w-full flex flex-col items-center pt-2 pb-1">
-          {/* Scrubber / Progress Bar */}
-          <div className="w-full px-2">
-            <div className="relative flex items-center">
-              <input
-                type="range"
-                min={0}
-                max={safeDuration > 0 ? safeDuration : 100}
-                step={0.5}
-                disabled={safeDuration === 0}
-                value={clampedCurrentTime}
-                onChange={handleSeekChange}
-                aria-label="Seek track position"
-                className={`w-full h-2 rounded-lg appearance-none accent-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                  safeDuration === 0
-                    ? 'bg-slate-100 cursor-not-allowed'
-                    : 'bg-slate-200 cursor-pointer'
-                }`}
-              />
-            </div>
-            <div className="flex items-center justify-between mt-1.5 px-0.5 select-none">
-              <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {formatDuration(safeCurrentTime)}
-              </span>
-              <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {formatDuration(safeDuration)}
-              </span>
+        {/* Bottom Playback & Volume Area */}
+        <div className="relative z-10 w-full flex flex-col items-center pt-2">
+          {/* Scrubber Timeline */}
+          <div className="w-full px-2 max-w-md mx-auto">
+            <input
+              type="range"
+              min={0}
+              max={safeDuration > 0 ? safeDuration : 100}
+              step={0.5}
+              disabled={safeDuration === 0}
+              value={clampedCurrentTime}
+              onChange={handleSeekChange}
+              aria-label="Seek track position"
+              className={`w-full h-1.5 rounded-full appearance-none accent-zinc-100 focus:outline-none ${
+                safeDuration === 0
+                  ? 'bg-zinc-800 cursor-not-allowed'
+                  : 'bg-zinc-800 cursor-pointer hover:bg-zinc-700'
+              }`}
+            />
+            <div className="flex items-center justify-between mt-2 select-none font-mono text-xs text-zinc-400">
+              <span>{formatDuration(safeCurrentTime)}</span>
+              <span>{formatDuration(safeDuration)}</span>
             </div>
           </div>
 
-          {/* Playback Controls Row */}
-          <div className="flex items-center justify-between w-full max-w-xs mt-4 px-2">
-            {/* Shuffle Button */}
+          {/* Core Playback Buttons */}
+          <div className="flex items-center justify-between w-full max-w-xs mt-5 px-2">
             <button
               type="button"
               onClick={() => setIsShuffle((prev) => !prev)}
               aria-label={isShuffle ? 'Disable shuffle' : 'Enable shuffle'}
-              className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 cursor-pointer ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 cursor-pointer ${
                 isShuffle
-                  ? 'text-blue-600 bg-blue-50 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'text-zinc-100 bg-white/10'
+                  : 'text-zinc-500 hover:text-zinc-200'
               }`}
             >
-              <Shuffle className="w-5 h-5" />
+              <Shuffle className="w-4 h-4" />
             </button>
 
-            {/* Previous Button */}
             <button
               type="button"
               onClick={onPrevious}
               disabled={!onPrevious}
               aria-label="Previous track"
-              className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 onPrevious
-                  ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer'
-                  : 'text-slate-300 cursor-not-allowed opacity-30'
+                  ? 'text-zinc-300 hover:text-zinc-100 cursor-pointer'
+                  : 'text-zinc-700 cursor-not-allowed opacity-30'
               }`}
             >
-              <SkipBack className="w-6 h-6" />
+              <SkipBack className="w-5 h-5 fill-current" />
             </button>
 
-            {/* Big Play / Pause Button */}
+            {/* Main Play / Pause Button */}
             <button
               type="button"
               onClick={onPlayPause}
+              disabled={isResolvingStream}
               aria-label={isPlaying ? 'Pause' : 'Play'}
-              className="min-h-[64px] min-w-[64px] w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md hover:bg-blue-700 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-pointer"
+              className="w-16 h-16 rounded-full bg-zinc-100 text-zinc-950 flex items-center justify-center shadow-glow hover:bg-white active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 cursor-pointer disabled:opacity-70"
             >
-              {isPlaying ? (
-                <Pause className="w-7 h-7 fill-current" />
+              {isResolvingStream ? (
+                <Loader2 className="w-6 h-6 animate-spin text-zinc-950" />
+              ) : isPlaying ? (
+                <Pause className="w-6 h-6 fill-current" />
               ) : (
-                <Play className="w-7 h-7 fill-current ml-1" />
+                <Play className="w-6 h-6 fill-current ml-0.5" />
               )}
             </button>
 
-            {/* Next Button */}
             <button
               type="button"
               onClick={onNext}
               disabled={!onNext}
               aria-label="Next track"
-              className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 onNext
-                  ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer'
-                  : 'text-slate-300 cursor-not-allowed opacity-30'
+                  ? 'text-zinc-300 hover:text-zinc-100 cursor-pointer'
+                  : 'text-zinc-700 cursor-not-allowed opacity-30'
               }`}
             >
-              <SkipForward className="w-6 h-6" />
+              <SkipForward className="w-5 h-5 fill-current" />
             </button>
 
-            {/* Repeat Button */}
             <button
               type="button"
               onClick={() => setIsRepeat((prev) => !prev)}
               aria-label={isRepeat ? 'Disable repeat' : 'Enable repeat'}
-              className={`min-h-[48px] min-w-[48px] w-12 h-12 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 cursor-pointer ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-transform duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 cursor-pointer ${
                 isRepeat
-                  ? 'text-blue-600 bg-blue-50 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'text-zinc-100 bg-white/10'
+                  : 'text-zinc-500 hover:text-zinc-200'
               }`}
             >
-              <Repeat className="w-5 h-5" />
+              <Repeat className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Volume Control Row */}
-          <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 border border-slate-200/70 rounded-2xl mt-4 max-w-sm mx-auto w-full">
+          {/* Volume Control */}
+          <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900/60 border border-white/5 rounded-2xl mt-5 max-w-xs mx-auto w-full">
             <button
               type="button"
               onClick={handleMuteClick}
               aria-label={isVolumeMuted ? 'Unmute volume' : 'Mute volume'}
-              className="min-w-[48px] min-h-[48px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-zinc-100 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 cursor-pointer"
             >
               {isVolumeMuted ? (
-                <VolumeX className="w-5 h-5 text-slate-500" />
+                <VolumeX className="w-4 h-4 text-zinc-500" />
               ) : (
-                <Volume2 className="w-5 h-5 text-slate-600" />
+                <Volume2 className="w-4 h-4 text-zinc-400" />
               )}
             </button>
 
@@ -412,7 +407,7 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
               value={isVolumeMuted ? 0 : volume}
               onChange={handleVolumeInput}
               aria-label="Volume level"
-              className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-zinc-100 focus:outline-none"
             />
           </div>
         </div>
@@ -422,3 +417,4 @@ export const MobilePlayerSheet = React.memo<MobilePlayerSheetProps>(({
 });
 
 MobilePlayerSheet.displayName = 'MobilePlayerSheet';
+export default MobilePlayerSheet;

@@ -97,6 +97,7 @@ export default function App() {
 
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>('stream');
   const [streamPreference, setStreamPreference] = useState<'full' | 'preview'>('full');
+  const [isResolvingStream, setIsResolvingStream] = useState<boolean>(false);
 
   const [activeTrack, setActiveTrack] = useState<AnyPlayableTrack | null>(null);
   const [activeQueue, setActiveQueue] = useState<AnyPlayableTrack[]>([]);
@@ -247,19 +248,10 @@ export default function App() {
       }
 
       if (streamPreference === 'full') {
-        const previewUrl = getTrackAudioUrl(track);
-
-        // Instant 0ms feedback: if track has preview URL, start playing preview on HTML5 audio immediately
-        if (previewUrl && audioRef.current) {
-          setPlaybackSource('preview');
-          const audio = audioRef.current;
-          if (audio.src !== previewUrl) {
-            audio.src = previewUrl;
-            audio.currentTime = 0;
-          }
-          audio.play().catch((err) => {
-            console.warn('[Audio Engine] Instant preview play error:', err);
-          });
+        setIsResolvingStream(true);
+        // Pause any active preview playback so full audio plays cleanly from the start
+        if (audioRef.current) {
+          audioRef.current.pause();
         }
 
         // Concurrently call resolveTrackStream(track.title, artistName, controller.signal)
@@ -282,9 +274,9 @@ export default function App() {
           const resolved = await resolveTrackStream(track.title, artistName, controller.signal);
           // Only trigger loadAndPlay if request ID matches and user play intent is still active
           if (reqId === streamReqIdRef.current && userPlayIntentRef.current) {
+            setIsResolvingStream(false);
             if (resolved && resolved.videoId) {
-              // Smooth handoff: maintain isHandoffRef and let preview keep playing until YouTube bridge fires 'playing'
-              isHandoffRef.current = true;
+              isHandoffRef.current = false;
               ytBridgeRef.current?.loadAndPlay(resolved.videoId);
               setPlaybackSource('stream');
               if (resolved.duration && resolved.duration > 0) {
@@ -292,15 +284,31 @@ export default function App() {
               }
             } else {
               isHandoffRef.current = false;
-              // If resolution returns null: keep HTML5 audio playing as graceful fallback
-              setPlaybackSource('preview');
+              // If full stream is unavailable, fallback to preview
+              console.warn('[streamResolver] Full stream unavailable, fallback to preview');
+              const previewUrl = getTrackAudioUrl(track);
+              if (previewUrl && audioRef.current) {
+                setPlaybackSource('preview');
+                const audio = audioRef.current;
+                audio.src = previewUrl;
+                audio.currentTime = 0;
+                audio.play().catch(console.warn);
+              }
             }
           }
         } catch (err) {
           console.warn('[streamResolver] Resolution error, falling back to preview:', err);
           if (reqId === streamReqIdRef.current) {
+            setIsResolvingStream(false);
             isHandoffRef.current = false;
-            setPlaybackSource('preview');
+            const previewUrl = getTrackAudioUrl(track);
+            if (previewUrl && audioRef.current) {
+              setPlaybackSource('preview');
+              const audio = audioRef.current;
+              audio.src = previewUrl;
+              audio.currentTime = 0;
+              audio.play().catch(console.warn);
+            }
           }
         }
       } else {
@@ -781,7 +789,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-100 select-none">
+    <div className="min-h-screen bg-canvas text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 select-none">
       {/* Hidden single HTML5 <audio> engine mounted at root */}
       <audio
         ref={audioRef}
@@ -814,6 +822,7 @@ export default function App() {
       <MobileTopHeader
         title="Yoinks Music"
         playbackSource={playbackSource}
+        isResolvingStream={isResolvingStream}
         onOpenSettings={handleOpenSettings}
       />
 
@@ -832,16 +841,16 @@ export default function App() {
 
             {/* Skeletons while searching */}
             {isSearching && (
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs animate-pulse flex flex-col gap-3.5">
+              <div className="bg-zinc-900/60 rounded-2xl border border-white/10 p-5 shadow-xs animate-pulse flex flex-col gap-3.5">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-[60px] h-[60px] rounded-full bg-slate-200 flex-shrink-0" />
+                  <div className="w-[60px] h-[60px] rounded-full bg-zinc-800 flex-shrink-0" />
                   <div className="flex-1 space-y-2">
-                    <div className="w-24 h-4 bg-slate-200 rounded-full" />
-                    <div className="w-48 h-5 bg-slate-200 rounded" />
-                    <div className="w-32 h-3.5 bg-slate-200 rounded" />
+                    <div className="w-24 h-4 bg-zinc-800 rounded-full" />
+                    <div className="w-48 h-5 bg-zinc-800 rounded" />
+                    <div className="w-32 h-3.5 bg-zinc-800 rounded" />
                   </div>
                 </div>
-                <div className="w-full h-12 bg-slate-200 rounded-xl" />
+                <div className="w-full h-12 bg-zinc-800 rounded-xl" />
               </div>
             )}
 
@@ -855,14 +864,14 @@ export default function App() {
 
             {/* Empty discovery state when query returned 0 matches */}
             {!isSearching && !matchedArtist && (
-              <section className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center flex flex-col items-center justify-center gap-2.5 shadow-xs select-none">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+              <section className="bg-zinc-900/40 rounded-2xl border border-white/5 p-8 text-center flex flex-col items-center justify-center gap-2.5 shadow-xs select-none">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-800/80 border border-white/5 flex items-center justify-center text-zinc-500">
                   <Music2 className="w-6 h-6" aria-hidden="true" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="text-base font-semibold text-zinc-200">
                   No artist found
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-600 max-w-xs">
+                <p className="text-xs sm:text-sm text-zinc-400 max-w-xs">
                   Try searching for another artist or choose from the quick discovery chips above.
                 </p>
               </section>
@@ -926,58 +935,58 @@ export default function App() {
         {currentView === 'settings' && (
           <div className="flex flex-col gap-4 sm:gap-5 pb-8 select-none">
             {/* Header */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <div className="bg-zinc-900/70 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs">
+              <h1 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
                 Settings & Preferences
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                Audio fidelity, streaming preferences, offline cache metrics, and app principles.
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                Audio fidelity, streaming resolution, storage metrics, and sound architecture.
               </p>
             </div>
 
             {/* Audio Streaming Mode Card */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
+            <section className="bg-zinc-900/60 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-100/80">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center flex-shrink-0 border border-white/5">
                   <Radio className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                  <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                     Audio Streaming Mode
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Choose between full songs or quick 30s previews
+                  <p className="text-xs text-zinc-400 font-medium">
+                    Choose between full-length streaming or lightweight preview clips
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2.5 mt-1">
-                {/* Full-Length Audio (Stream Resolver) */}
+                {/* Full-Length Audio (Direct Full Stream) */}
                 <button
                   type="button"
                   onClick={() => handleSetStreamPreference('full')}
                   className={`min-h-[52px] p-3.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     streamPreference === 'full'
-                      ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
-                      : 'bg-slate-50 border-slate-200/60 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-zinc-800/90 border-zinc-500/50 text-zinc-100 shadow-xs'
+                      : 'bg-zinc-950/60 border-white/5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
                   }`}
                   aria-pressed={streamPreference === 'full'}
                 >
                   <div className="flex flex-col pr-2">
-                    <span className="text-sm font-bold text-slate-900">
-                      Full-Length Audio (Stream Resolver)
+                    <span className="text-sm font-semibold text-zinc-100">
+                      Direct Full-Length Stream
                     </span>
-                    <span className="text-xs text-slate-600 font-medium mt-0.5">
-                      Stream complete tracks with instant 0ms preview feedback
+                    <span className="text-xs text-zinc-400 font-medium mt-0.5">
+                      Stream complete songs end-to-end with high-fidelity audio resolution
                     </span>
                   </div>
                   {streamPreference === 'full' ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                       <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Active</span>
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold text-slate-400 shrink-0 px-2 py-1">
+                    <span className="text-xs font-semibold text-zinc-500 shrink-0 px-2 py-1">
                       Select
                     </span>
                   )}
@@ -989,26 +998,26 @@ export default function App() {
                   onClick={() => handleSetStreamPreference('preview')}
                   className={`min-h-[52px] p-3.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     streamPreference === 'preview'
-                      ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
-                      : 'bg-slate-50 border-slate-200/60 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-zinc-800/90 border-zinc-500/50 text-zinc-100 shadow-xs'
+                      : 'bg-zinc-950/60 border-white/5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80'
                   }`}
                   aria-pressed={streamPreference === 'preview'}
                 >
                   <div className="flex flex-col pr-2">
-                    <span className="text-sm font-bold text-slate-900">
+                    <span className="text-sm font-semibold text-zinc-100">
                       Quick 30s Previews
                     </span>
-                    <span className="text-xs text-slate-600 font-medium mt-0.5">
-                      Lightweight 30s preview clips with minimal data usage
+                    <span className="text-xs text-zinc-400 font-medium mt-0.5">
+                      Lightweight 30s preview clips for minimal data usage
                     </span>
                   </div>
                   {streamPreference === 'preview' ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                       <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Active</span>
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold text-slate-400 shrink-0 px-2 py-1">
+                    <span className="text-xs font-semibold text-zinc-500 shrink-0 px-2 py-1">
                       Select
                     </span>
                   )}
@@ -1017,26 +1026,26 @@ export default function App() {
             </section>
 
             {/* Audio Quality Card */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
+            <section className="bg-zinc-900/60 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-100/80">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center flex-shrink-0 border border-white/5">
                   <Sliders className="w-4 h-4" aria-hidden="true" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                   Audio Quality
                 </h2>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 flex items-center justify-between">
+              <div className="p-3.5 bg-zinc-950/60 rounded-xl border border-white/5 flex items-center justify-between">
                 <div>
-                  <span className="text-sm font-bold text-slate-900 block">
-                    High Quality (MP3 320k)
+                  <span className="text-sm font-semibold text-zinc-100 block">
+                    High Fidelity (320 kbps AAC/MP3)
                   </span>
-                  <span className="text-xs text-slate-600 font-medium">
-                    Standard high-bitrate streaming & offline format
+                  <span className="text-xs text-zinc-400 font-medium">
+                    Master audio stream resolution across all playback engines
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>ACTIVE</span>
                 </span>
@@ -1044,26 +1053,26 @@ export default function App() {
             </section>
 
             {/* Offline Cache & Storage Management */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
+            <section className="bg-zinc-900/60 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center flex-shrink-0 border border-slate-200/80">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center flex-shrink-0 border border-white/5">
                   <HardDrive className="w-4 h-4" aria-hidden="true" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                   Offline Music Storage
                 </h2>
               </div>
 
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
+              <div className="flex items-center justify-between p-3.5 bg-zinc-950/60 rounded-xl border border-white/5">
                 <div className="flex flex-col">
-                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
                     Total Offline Size
                   </span>
-                  <span className="text-lg font-bold text-slate-900">
+                  <span className="text-lg font-bold text-zinc-100 mt-0.5">
                     ~{(recentTracks.length * 3.8).toFixed(1)} MB
                   </span>
-                  <span className="text-xs text-slate-600 mt-0.5">
-                    {recentTracks.length} {recentTracks.length === 1 ? 'song saved' : 'songs saved'}
+                  <span className="text-xs text-zinc-400 mt-0.5">
+                    {recentTracks.length} {recentTracks.length === 1 ? 'track saved' : 'tracks saved'}
                   </span>
                 </div>
 
@@ -1072,72 +1081,72 @@ export default function App() {
                     type="button"
                     onClick={handleClearLibrary}
                     aria-label="Clear all offline music from device"
-                    className="min-h-[48px] px-4 py-2 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 transition-all active:scale-95 inline-flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                    className="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all active:scale-95 inline-flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                   >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Clear Cache</span>
                   </button>
                 )}
               </div>
 
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Tracks saved offline are stored on your device and can be played even without an active internet connection.
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Downloaded tracks are stored locally on your device for seamless playback without an internet connection.
               </p>
             </section>
 
-            {/* Senior-Friendly Anti-Slop Principles */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
+            {/* Design & Usability Standards */}
+            <section className="bg-zinc-900/60 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs flex flex-col gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-100/80">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center flex-shrink-0 border border-white/5">
                   <Sparkles className="w-4 h-4" aria-hidden="true" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                  Design Standards
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
+                  Design Architecture
                 </h2>
               </div>
 
-              <ul className="space-y-2 text-xs sm:text-sm text-slate-700">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />
+              <ul className="space-y-2 text-xs sm:text-sm text-zinc-300">
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
                   <span>
-                    <strong>Senior-Friendly Touch Targets:</strong> All buttons and interactive rows are sized at 48px or larger.
+                    <strong className="text-zinc-100">Universal Ergonomics:</strong> Generous 48px+ touch targets optimized for single-hand mobile ease.
                   </span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
                   <span>
-                    <strong>WCAG AAA Contrast:</strong> Clean high-contrast typography ensuring maximum legibility under all conditions.
+                    <strong className="text-zinc-100">OLED Dark Aesthetics:</strong> Anti-glare obsidian palette calibrated for high contrast and visual comfort.
                   </span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
                   <span>
-                    <strong>Zero Clutter:</strong> Ad-free, distraction-free player with single-purpose controls.
+                    <strong className="text-zinc-100">Cross-Platform Ready:</strong> Native safe-area handling conforming to both iOS and Android design guidelines.
                   </span>
                 </li>
               </ul>
             </section>
 
             {/* About Yoinks Music */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex flex-col gap-2.5">
+            <section className="bg-zinc-900/60 rounded-2xl border border-white/10 p-4 sm:p-5 shadow-xs flex flex-col gap-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center flex-shrink-0 border border-slate-200/80">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center flex-shrink-0 border border-white/5">
                   <Info className="w-4 h-4" aria-hidden="true" />
                 </div>
-                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                   About Yoinks Music
                 </h2>
               </div>
 
-              <div className="text-xs sm:text-sm text-slate-600 space-y-1">
+              <div className="text-xs sm:text-sm text-zinc-400 space-y-1">
                 <p>
-                  <strong className="text-slate-800">Version:</strong> 1.0.0 (Capacitor Native Android)
+                  <strong className="text-zinc-200">Version:</strong> 1.0.0 (Cross-Platform iOS &amp; Android)
                 </p>
                 <p>
-                  <strong className="text-slate-800">Catalog Engine:</strong> Deezer Music Public API
+                  <strong className="text-zinc-200">Catalog Engine:</strong> Deezer Music Public API
                 </p>
                 <p>
-                  <strong className="text-slate-800">Offline Engine:</strong> Dual-tier Capacitor Preferences &amp; LocalStorage
+                  <strong className="text-zinc-200">Playback Architecture:</strong> Universal Audio Bridge &amp; Native Local Storage
                 </p>
               </div>
             </section>
@@ -1153,6 +1162,9 @@ export default function App() {
               track={activeTrack}
               isPlaying={isPlaying}
               playbackSource={playbackSource}
+              isResolvingStream={isResolvingStream}
+              currentTime={currentTime}
+              duration={duration}
               onPlayPause={handlePlayPause}
               onNext={hasNext ? handleNext : undefined}
               onExpand={handleExpandPlayerSheet}
@@ -1171,6 +1183,7 @@ export default function App() {
         volume={volume}
         isMuted={isMuted}
         playbackSource={playbackSource}
+        isResolvingStream={isResolvingStream}
         onPlayPause={handlePlayPause}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}

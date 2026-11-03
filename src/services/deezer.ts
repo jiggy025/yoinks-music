@@ -42,19 +42,29 @@ async function fetchDeezerJson(url: string, callerSignal?: AbortSignal): Promise
     }
   }
 
-  // 2. Web Browser Fallback
-  try {
-    const res = await fetch(url, { signal: createSignal(callerSignal) });
-    if (!res.ok) {
-      console.warn(`[Deezer API] Browser fetch HTTP ${res.status}: ${res.statusText}`);
-      return null;
+  // 2. Web Browser Fallback: Route through /api/deezer to eliminate CORS errors in browser
+  const proxyEndpoints = [
+    `/api/deezer?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    url,
+  ];
+
+  for (const target of proxyEndpoints) {
+    try {
+      const res = await fetch(target, { signal: createSignal(callerSignal) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && (json.data || json.id || json.title || (!json.error && !json.errors))) {
+          return json;
+        }
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return null;
+      // Continue to next fallback
     }
-    return await res.json();
-  } catch (err: any) {
-    if (err?.name === 'AbortError') return null;
-    console.error(`[Deezer API] Browser fetch error for ${url}:`, err);
-    return null;
   }
+
+  return null;
 }
 
 /**

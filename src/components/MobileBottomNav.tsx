@@ -29,9 +29,9 @@ export const MobileBottomNav = React.memo<MobileBottomNavProps>(({
       role="navigation"
       aria-label="Main Navigation"
       data-testid="mobile-bottom-nav"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 pb-[max(0.5rem,env(safe-area-inset-bottom))] select-none"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-xl border-t border-white/5 pb-[max(0.5rem,env(safe-area-inset-bottom))] select-none"
     >
-      <div className="flex items-center justify-around max-w-md mx-auto px-2">
+      <div className="flex items-center justify-around max-w-lg mx-auto px-4">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
           const isActive = activeTab === id;
 
@@ -42,15 +42,15 @@ export const MobileBottomNav = React.memo<MobileBottomNavProps>(({
               onClick={() => onSelectTab(id)}
               aria-current={isActive ? 'page' : undefined}
               aria-label={label}
-              className={`min-h-[52px] flex-1 flex flex-col items-center justify-center gap-1 py-1.5 px-2 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl cursor-pointer ${
+              className={`min-h-[52px] flex-1 flex flex-col items-center justify-center gap-1 py-1 px-2 transition-transform duration-150 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded-xl cursor-pointer ${
                 isActive
-                  ? 'text-blue-600 font-bold'
-                  : 'text-slate-600 font-semibold hover:text-slate-900'
+                  ? 'text-zinc-100 font-medium'
+                  : 'text-zinc-500 hover:text-zinc-300 font-normal'
               }`}
             >
               <Icon
-                className={`w-5 h-5 transition-transform ${
-                  isActive ? 'stroke-[2.5px] scale-105' : 'stroke-2'
+                className={`w-5 h-5 transition-transform duration-150 ${
+                  isActive ? 'stroke-[2.2px] scale-105 text-zinc-100' : 'stroke-[1.75px]'
                 }`}
               />
               <span className="text-[11px] leading-tight tracking-tight">
@@ -65,3 +65,4 @@ export const MobileBottomNav = React.memo<MobileBottomNavProps>(({
 });
 
 MobileBottomNav.displayName = 'MobileBottomNav';
+export default MobileBottomNav;

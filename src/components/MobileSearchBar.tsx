@@ -9,13 +9,16 @@ export interface MobileSearchBarProps {
 }
 
 export const QUICK_DISCOVERY_CHIPS = [
-  'The Carpenters',
   'Frank Sinatra',
+  'Daft Punk',
   'The Beatles',
-  'Elvis Presley',
-  'Simon & Garfunkel',
-  'Nat King Cole',
-  'ABBA',
+  'Taylor Swift',
+  'Kendrick Lamar',
+  'Queen',
+  'Billie Eilish',
+  'Fleetwood Mac',
+  'Radiohead',
+  'Miles Davis',
 ] as const;
 
 export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
@@ -55,18 +58,18 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
   };
 
   return (
-    <div className="w-full flex flex-col gap-2.5">
+    <div className="w-full flex flex-col gap-3">
       {/* Search Input Container */}
       <form
         role="search"
         onSubmit={handleSubmit}
         className="relative w-full flex items-center"
       >
-        <div className="absolute left-3.5 pointer-events-none flex items-center justify-center text-slate-400">
+        <div className="absolute left-3.5 pointer-events-none flex items-center justify-center text-zinc-400">
           {isSearching ? (
-            <Loader2 className="w-[18px] h-[18px] animate-spin text-blue-600" aria-label="Searching..." />
+            <Loader2 className="w-4 h-4 animate-spin text-zinc-300" aria-label="Searching..." />
           ) : (
-            <Search className="w-[18px] h-[18px] text-slate-400" aria-hidden="true" />
+            <Search className="w-4 h-4 text-zinc-400" aria-hidden="true" />
           )}
         </div>
 
@@ -76,9 +79,9 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search artists, songs, or albums..."
+          placeholder="Artists, songs, or albums..."
           aria-label="Search music"
-          className="w-full min-h-[48px] pl-10 pr-12 rounded-xl bg-white border border-slate-200/80 text-slate-900 placeholder:text-slate-400 text-base font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 focus:border-blue-500 shadow-xs transition-all [&::-webkit-search-cancel-button]:hidden"
+          className="w-full h-11 pl-10 pr-11 rounded-xl bg-zinc-900/70 border border-white/10 text-zinc-100 placeholder:text-zinc-500 text-sm font-normal focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400/50 shadow-inner transition-colors duration-150 [&::-webkit-search-cancel-button]:hidden"
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
@@ -89,7 +92,7 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
             type="button"
             onClick={handleClear}
             aria-label="Clear search query"
-            className="absolute right-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            className="absolute right-1 w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 active:scale-95 transition-transform duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -98,17 +101,24 @@ export const MobileSearchBar: React.FC<MobileSearchBarProps> = React.memo(({
 
       {/* Quick discovery chips row */}
       <div className="w-full overflow-x-auto scrollbar-none py-0.5 -my-0.5">
-        <div className="flex items-center gap-2 min-w-max px-0.5">
-          {QUICK_DISCOVERY_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => handleChipClick(chip)}
-              className="min-h-[44px] px-4 py-2 rounded-full text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 hover:border-blue-500 hover:text-blue-600 active:scale-[0.98] transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-            >
-              {chip}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          {QUICK_DISCOVERY_CHIPS.map((chip) => {
+            const isCurrent = query.toLowerCase() === chip.toLowerCase();
+            return (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => handleChipClick(chip)}
+                className={`min-h-[32px] px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer border select-none active:scale-95 ${
+                  isCurrent
+                    ? 'bg-zinc-100 text-zinc-950 border-zinc-100 font-semibold shadow-xs'
+                    : 'bg-zinc-900/60 border-white/5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 hover:border-white/10'
+                }`}
+              >
+                {chip}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

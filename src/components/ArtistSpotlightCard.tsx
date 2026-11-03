@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, BadgeCheck, Disc3, ArrowRight, Users } from 'lucide-react';
+import { User, CheckCircle2, Disc3, ArrowRight, Users } from 'lucide-react';
 import { DeezerArtist } from '../types';
 
 export interface ArtistSpotlightCardProps {
@@ -13,7 +13,6 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  // Reset image error state whenever the artist changes
   useEffect(() => {
     setImageError(false);
   }, [artist.id, artist.pictureMedium, artist.pictureBig]);
@@ -26,8 +25,8 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
     artist.pictureSmall;
 
   return (
-    <article className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-col gap-3.5 select-none">
-      {/* Row 1: Portrait & Info (clickable for quick discography access) */}
+    <article className="bg-zinc-900/70 backdrop-blur-md rounded-2xl border border-white/10 p-4 shadow-xl flex flex-col gap-3.5 select-none hover:border-white/20 transition-colors duration-200">
+      {/* Row 1: Portrait & Info */}
       <div
         role="button"
         tabIndex={0}
@@ -39,10 +38,10 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
           }
         }}
         aria-label={`View discography for ${artist.name}`}
-        className="flex items-center gap-3.5 cursor-pointer rounded-xl p-1 -m-1 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+        className="flex items-center gap-3.5 cursor-pointer rounded-xl p-1 -m-1 hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
       >
-        {/* 60x60px circular artist portrait with fallback */}
-        <div className="w-[60px] h-[60px] rounded-full overflow-hidden flex-shrink-0 border border-slate-200/80 bg-slate-100 flex items-center justify-center shadow-xs">
+        {/* 64x64px circular artist portrait */}
+        <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 border border-white/10 bg-zinc-800 flex items-center justify-center shadow-md">
           {imageUrl && !imageError ? (
             <img
               src={imageUrl}
@@ -52,30 +51,27 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
               loading="lazy"
             />
           ) : (
-            <User className="w-7 h-7 text-slate-400" aria-hidden="true" />
+            <User className="w-7 h-7 text-zinc-400" aria-hidden="true" />
           )}
         </div>
 
         {/* Info block */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center">
-          {/* Eyebrow pill */}
-          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold tracking-wider uppercase border border-blue-100/80 w-fit">
-            <BadgeCheck className="w-[13px] h-[13px] text-blue-600 flex-shrink-0" aria-hidden="true" />
-            <span>VERIFIED ARTIST</span>
+          <div className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400">
+            <CheckCircle2 className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" aria-hidden="true" />
+            <span>Verified Artist</span>
           </div>
 
-          {/* Artist name */}
           <h3
-            className="text-lg sm:text-xl font-bold text-slate-900 truncate"
+            className="text-lg font-semibold text-zinc-100 truncate tracking-tight"
             title={artist.name}
           >
             {artist.name}
           </h3>
 
-          {/* Stats: Albums count with Disc3 icon, fan count if > 0 */}
-          <div className="flex items-center gap-2.5 text-sm text-slate-600 font-medium">
+          <div className="flex items-center gap-2.5 text-xs text-zinc-400 font-mono">
             <span className="flex items-center gap-1">
-              <Disc3 className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" aria-hidden="true" />
+              <Disc3 className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" aria-hidden="true" />
               <span>
                 {artist.nbAlbum} {artist.nbAlbum === 1 ? 'Album' : 'Albums'}
               </span>
@@ -83,12 +79,10 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
 
             {typeof artist.nbFan === 'number' && artist.nbFan > 0 && (
               <>
-                <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" aria-hidden="true" />
+                <span className="w-1 h-1 rounded-full bg-zinc-600 flex-shrink-0" aria-hidden="true" />
                 <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" aria-hidden="true" />
-                  <span>
-                    {artist.nbFan.toLocaleString()} {artist.nbFan === 1 ? 'Fan' : 'Fans'}
-                  </span>
+                  <Users className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" aria-hidden="true" />
+                  <span>{artist.nbFan.toLocaleString()} listeners</span>
                 </span>
               </>
             )}
@@ -96,15 +90,14 @@ export const ArtistSpotlightCard: React.FC<ArtistSpotlightCardProps> = React.mem
         </div>
       </div>
 
-      {/* Row 2: Full-width primary CTA button */}
+      {/* Row 2: Clean action CTA button */}
       <button
         type="button"
         onClick={() => onViewArtist(artist)}
-        aria-label={`View discography and albums for ${artist.name}`}
-        className="min-h-[48px] w-full px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+        className="w-full h-11 px-4 rounded-xl bg-zinc-100 text-zinc-950 font-medium text-sm flex items-center justify-center gap-2 hover:bg-white active:scale-[0.98] transition-transform duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
       >
-        <span>View Discography & Albums</span>
-        <ArrowRight className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+        <span>Explore Discography</span>
+        <ArrowRight className="w-4 h-4" aria-hidden="true" />
       </button>
     </article>
   );

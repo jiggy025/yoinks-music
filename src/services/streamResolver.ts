@@ -217,9 +217,33 @@ export async function resolveTrackStream(
 
     // 2. Build search query: `${artist} ${title} audio`
     const query = `${trimmedArtist} ${trimmedTitle} audio`;
+
+    // 3. Web Browser Optimization: Query Vercel Edge API /api/resolve to bypass browser CORS
+    if (!Capacitor.isNativePlatform()) {
+      try {
+        const resolveRes = await fetch(`/api/resolve?q=${encodeURIComponent(query)}`, {
+          signal,
+        });
+        if (resolveRes.ok) {
+          const resolveJson = await resolveRes.json();
+          if (resolveJson?.videoId) {
+            await cacheStream(trimmedTitle, trimmedArtist, resolveJson.videoId);
+            return {
+              videoId: resolveJson.videoId,
+              source: 'youtube',
+              title: trimmedTitle,
+              artist: trimmedArtist,
+            };
+          }
+        }
+      } catch (proxyErr) {
+        // Fall back to direct HTML scrape if /api/resolve is unavailable
+      }
+    }
+
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 
-    // 3. Network fetcher
+    // 4. Network fetcher (Native CapacitorHttp or direct fetch)
     const html = await fetchYouTubeHtml(url, signal);
     if (!html) {
       return null;

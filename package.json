@@ -1,20 +1,24 @@
 {
   "name": "yoinks-music",
   "version": "1.0.0",
-  "description": "Senior-friendly high taste mobile music player and discography discovery",
+  "description": "Universal high-taste mobile music player and discography discovery across all ages (iOS & Android)",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "cap:sync": "cap sync android",
-    "cap:open": "cap open android",
-    "build:cap": "npm run build && cap sync android"
+    "cap:sync": "cap sync",
+    "cap:sync:android": "cap sync android",
+    "cap:sync:ios": "cap sync ios",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "build:cap": "npm run build && cap sync"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
     "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/ios": "^8.6.0",
     "@capacitor/preferences": "^8.0.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

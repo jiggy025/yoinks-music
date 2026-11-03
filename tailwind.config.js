@@ -7,10 +7,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: '#f8fafc',
+        canvas: '#09090b',
+        surface: '#121215',
+        'surface-raised': '#18181b',
+        'surface-elevated': '#222226',
       },
       boxShadow: {
-        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.25)',
+        'glow': '0 0 24px -4px rgba(255, 255, 255, 0.12)',
+        'player': '0 12px 32px -8px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08)',
       },
       padding: {
         'safe-top': 'env(safe-area-inset-top)',

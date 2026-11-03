@@ -3,3 +3,5 @@ dist/
 .superpowers/
 *.local
 *.apk
+
+.vercel

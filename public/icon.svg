@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#09090b"/>
+  <!-- Subtle border -->
+  <rect width="504" height="504" x="4" y="4" rx="124" fill="none" stroke="#27272a" stroke-width="4"/>
+  <!-- Outer Vinyl Groove -->
+  <circle cx="256" cy="256" r="180" fill="#18181b" stroke="#27272a" stroke-width="3"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#27272a" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>
+  <circle cx="256" cy="256" r="120" fill="none" stroke="#27272a" stroke-width="2" stroke-dasharray="12 8" opacity="0.6"/>
+  <!-- Vinyl Center Label -->
+  <circle cx="256" cy="256" r="75" fill="#10b981"/>
+  <!-- Center Spindle Hole -->
+  <circle cx="256" cy="256" r="22" fill="#09090b" stroke="#059669" stroke-width="4"/>
+</svg>
